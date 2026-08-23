@@ -187,8 +187,6 @@ impl Client {
             "Desktop".into(),
             String::new(),
             config::VERSION.into(),
-            true,
-            false,
             self.id(),
         )
         .await

@@ -323,7 +323,7 @@ impl PhoneNumberInput {
     ///
     /// The functions prefers the code of the currently selected country over the system country
     /// code if both share the same calling code.
-    fn preferred_country_code(&self) -> Option<Cow<str>> {
+    fn preferred_country_code(&self) -> Option<Cow<'_, str>> {
         let system_country_code = self.imp().system_country_code.get().unwrap().as_deref();
 
         self.model()

@@ -431,9 +431,9 @@ pub(crate) fn user_status(status: &tdlib::enums::UserStatus) -> String {
                 gettext("last seen just now")
             }
         }
-        Recently => gettext("last seen recently"),
-        LastWeek => gettext("last seen within a week"),
-        LastMonth => gettext("last seen within a month"),
+        Recently(_) => gettext("last seen recently"),
+        LastWeek(_) => gettext("last seen within a week"),
+        LastMonth(_) => gettext("last seen within a month"),
     }
 }
 
@@ -609,7 +609,9 @@ fn message_call(
                 gettext("Declined incoming call")
             }
         }
-        Disconnected | HungUp | Empty => made_message_call(is_outgoing, is_video, duration),
+        Disconnected | HungUp | Empty | UpgradeToGroupCall(_) => {
+            made_message_call(is_outgoing, is_video, duration)
+        }
         Missed => {
             if is_outgoing {
                 gettext("Canceled call")

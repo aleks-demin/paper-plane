@@ -127,7 +127,7 @@ impl ClientStateAuthCode {
     }
 
     pub(crate) async fn resend_auth_code(&self) -> Result<(), tdlib::types::Error> {
-        match tdlib::functions::resend_authentication_code(self.auth_().client_().id()).await {
+        match tdlib::functions::resend_authentication_code(None, self.auth_().client_().id()).await {
             Ok(_) => Ok(()),
             Err(e) => {
                 log::error!("Failed to resend auth code: {e:?}");

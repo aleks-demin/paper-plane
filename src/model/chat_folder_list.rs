@@ -16,7 +16,6 @@ mod imp {
 
     #[derive(Debug, Default, Properties)]
     #[properties(wrapper_type = super::ChatFolderList)]
-
     pub(crate) struct ChatFolderList {
         pub(super) list: RefCell<Vec<model::ChatList>>,
         #[property(get, set, construct_only)]
@@ -251,7 +250,7 @@ impl ChatFolderList {
                 .for_each(|(position, info)| {
                     let chat_list = self.internal_get_or_create(info.id, position as u32);
 
-                    chat_list.set_title(info.title.as_str());
+                    chat_list.set_title(info.name.text.text.as_str());
                     chat_list.set_icon(info.icon.name.as_str());
                 });
 

@@ -198,7 +198,7 @@ impl PhoneNumber {
             match result {
                 model::SendPhoneNumberResult::AlreadyLoggedIn(client_session) => {
                     utils::ancestor::<_, ui::ClientManagerView>(self)
-                        .set_active_client(&client_session.client_());
+                        .set_active_client(client_session.client_());
 
                     self.log_out(&client).await;
                 }

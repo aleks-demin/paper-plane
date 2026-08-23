@@ -62,8 +62,13 @@ impl ClientStateAuthRegistration {
         first_name: String,
         last_name: String,
     ) -> Result<(), tdlib::types::Error> {
-        match tdlib::functions::register_user(first_name, last_name, self.auth_().client_().id())
-            .await
+        match tdlib::functions::register_user(
+            first_name,
+            last_name,
+            false,
+            self.auth_().client_().id(),
+        )
+        .await
         {
             Ok(_) => Ok(()),
             Err(e) => {

@@ -102,15 +102,10 @@ impl CountryList {
 
         country_code
             .and_then(|country_code| {
-                self.country_code_pos(country_code).and_then(|position| {
-                    if list[position as usize]
+                self.country_code_pos(country_code).filter(|position| {
+                    list[*position as usize]
                         .calling_codes()
                         .contains(calling_code)
-                    {
-                        Some(position)
-                    } else {
-                        None
-                    }
                 })
             })
             .or_else(|| {

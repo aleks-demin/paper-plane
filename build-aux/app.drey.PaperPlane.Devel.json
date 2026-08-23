@@ -87,45 +87,7 @@
             ]
         },
         {
-            "name": "tdlib-prebuilt",
-            "only-arches": [
-                "x86_64",
-                "aarch64"
-            ],
-            "buildsystem": "simple",
-            "build-commands": [
-                "install -d /app/lib/pkgconfig",
-                "install -D libtdjson.so.* /app/lib",
-                "ln -sf /app/lib/libtdjson.so.* /app/lib/libtdjson.so",
-                "install -D pkgconfig/* /app/lib/pkgconfig"
-            ],
-            "sources": [
-                {
-                    "only-arches": [
-                        "x86_64"
-                    ],
-                    "type": "archive",
-                    "url": "https://github.com/melix99/tdjson-ci/releases/download/1.8.19/tdjson-x86_64.zip",
-                    "sha256": "55af3cb2cd5d9616c96d3fa6529c90cd66bebd9943f6b6c9aa41ec792067ccef",
-                    "strip-components": 0
-                },
-                {
-                    "only-arches": [
-                        "aarch64"
-                    ],
-                    "type": "archive",
-                    "url": "https://github.com/melix99/tdjson-ci/releases/download/1.8.19/tdjson-aarch64.zip",
-                    "sha256": "e5f5bfbae1c0617fe06ec7f9d74d65569d4a5a1ca4567f067e9d66d2292edb26",
-                    "strip-components": 0
-                }
-            ]
-        },
-        {
             "name": "tdlib",
-            "skip-arches": [
-                "x86_64",
-                "aarch64"
-            ],
             "buildsystem": "cmake-ninja",
             "builddir": true,
             "config-opts": [
@@ -135,7 +97,7 @@
                 {
                     "type": "git",
                     "url": "https://github.com/tdlib/td.git",
-                    "commit": "8517026415e75a8eec567774072cbbbbb52376c1"
+                    "commit": "11e254af695060d8890024dd7faa1cc2d6685ef8"
                 }
             ]
         },
@@ -161,7 +123,8 @@
             "buildsystem": "meson",
             "run-tests": true,
             "config-opts": [
-                "-Dprofile=development"
+                "-Dprofile=development",
+                "--libdir=lib"
             ],
             "sources": [
                 {

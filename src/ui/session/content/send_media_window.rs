@@ -180,6 +180,7 @@ impl SendMediaWindow {
                 width: paintable.intrinsic_width(),
                 height: paintable.intrinsic_height(),
                 caption,
+                show_caption_above_media: false,
                 self_destruct_type: None,
                 has_spoiler: false,
             })
@@ -189,12 +190,15 @@ impl SendMediaWindow {
         let chat_id = chat.id();
         let client_id = chat.session_().client_().id();
 
-        let reply_to = Some(MessageReplyTo::Message(MessageReplyToMessage {
-            chat_id,
+        let reply_to = Some(InputMessageReplyTo::Message(InputMessageReplyToMessage {
             message_id: *imp.reply_to.get().unwrap(),
+            quote: None,
+            checklist_task_id: 0,
         }));
 
-        match tdlib::functions::send_message(chat_id, 0, reply_to, None, content, client_id).await {
+        match tdlib::functions::send_message(chat_id, None, reply_to, None, content, client_id)
+            .await
+        {
             Ok(_) => self.close(),
             Err(e) => imp.toast_overlay.add_toast(
                 adw::Toast::builder()

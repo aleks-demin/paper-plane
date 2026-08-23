@@ -313,6 +313,9 @@ impl Background {
             tdlib::enums::BackgroundType::Wallpaper(_) => {
                 unimplemented!("Wallpaper chat background")
             }
+            tdlib::enums::BackgroundType::ChatTheme(_) => {
+                unimplemented!("Chat theme background")
+            }
         };
 
         match fill {
@@ -385,6 +388,11 @@ fn hard_coded_themes(dark: bool) -> tdlib::types::ThemeSettings {
         use tdlib::types::*;
 
         ThemeSettings {
+            base_theme: if dark {
+                tdlib::enums::BuiltInTheme::Night
+            } else {
+                tdlib::enums::BuiltInTheme::Day
+            },
             background: Some(Background {
                 is_default: true,
                 is_dark: dark,
@@ -398,7 +406,7 @@ fn hard_coded_themes(dark: bool) -> tdlib::types::ThemeSettings {
             accent_color: 0,
             animate_outgoing_message_fill: false,
             outgoing_message_accent_color: 0,
-            outgoing_message_fill: Solid(BackgroundFillSolid { color: 0 }),
+            outgoing_message_fill: Some(Solid(BackgroundFillSolid { color: 0 })),
         }
     }
 

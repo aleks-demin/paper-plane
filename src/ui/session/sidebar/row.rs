@@ -620,8 +620,7 @@ fn sender_label(message: model::Message) -> Option<String> {
                     }
                     model::MessageForwardOrigin::Chat { chat, .. }
                     | model::MessageForwardOrigin::Channel { chat, .. } => chat.title(),
-                    model::MessageForwardOrigin::HiddenUser { sender_name }
-                    | model::MessageForwardOrigin::MessageImport { sender_name } => {
+                    model::MessageForwardOrigin::HiddenUser { sender_name } => {
                         sender_name.clone()
                     }
                 })

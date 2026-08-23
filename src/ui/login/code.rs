@@ -227,7 +227,7 @@ fn stringify_auth_code_type(code_type: tdlib::enums::AuthenticationCodeType) -> 
         // Translators: This is an authentication method
         TelegramMessage(_) => gettext("Telegram"),
         // Translators: This is an authentication method
-        Sms(_) | FirebaseAndroid(_) | FirebaseIos(_) => gettext("SMS"),
+        Sms(_) | SmsWord(_) | SmsPhrase(_) | FirebaseAndroid(_) | FirebaseIos(_) => gettext("SMS"),
         // Translators: This is an authentication method
         Call(_) => gettext("Call"),
         // Translators: This is an authentication method

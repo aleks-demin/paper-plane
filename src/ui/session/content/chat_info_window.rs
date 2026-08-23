@@ -164,14 +164,14 @@ impl ChatInfoWindow {
 
         // Phone number
         if !user.phone_number().is_empty() {
-            let row = new_property_row(&gettext("Mobile"), &format!("+{}", &user.phone_number()));
+            let row = new_property_row(&gettext("Mobile"), &format!("+{}", user.phone_number()));
             self.make_row_copyable(&row);
             imp.info_list.append(&row);
         }
 
         // Username
         if !user.username().is_empty() {
-            let row = new_property_row(&gettext("Username"), &format!("@{}", &user.username()));
+            let row = new_property_row(&gettext("Username"), &format!("@{}", user.username()));
             self.make_row_copyable(&row);
             imp.info_list.append(&row);
         }
@@ -246,7 +246,7 @@ impl ChatInfoWindow {
         if !supergroup.username().is_empty() {
             let row = new_property_row(
                 &gettext("Link"),
-                &format!("https://t.me/{}", &supergroup.username()),
+                &format!("https://t.me/{}", supergroup.username()),
             );
             self.make_row_copyable(&row);
             imp.info_list.append(&row);

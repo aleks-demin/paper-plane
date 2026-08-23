@@ -4,6 +4,9 @@ version = "0.1.0-beta.5"
 authors = ["Marco Melorio <marco.melorio@protonmail.com>", "Marcus Behrendt <marcus.behrendt.86@gmail.com>"]
 edition = "2021"
 
+[package.metadata.system-deps]
+tdjson = "1.8.61"
+
 [dependencies]
 adw = { version = "0.6", package = "libadwaita", features = ["v1_5"] }
 anyhow = "1"
@@ -22,9 +25,12 @@ qrcode-generator = { version = "4", default-features = false }
 regex = "1"
 rlt = { package = "gtk-rlottie", git = "https://github.com/paper-plane-developers/gtk-rlottie-rs.git", tag = "v0.8.1" }
 shumate = { version = "0.5", package = "libshumate" }
-tdlib = { version = "0.10", default-features = false }
+tdlib = { version = "1.4", package = "tdlib-rs", features = ["pkg-config"] }
 temp-dir = "0.1"
 thiserror = "1"
+
+[build-dependencies]
+tdlib = { version = "1.4", package = "tdlib-rs", features = ["pkg-config"] }
 
 [profile.release]
 lto = true

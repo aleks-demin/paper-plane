@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::cell::OnceCell;
 use std::cell::RefCell;
 
+use glib::clone;
 use glib::Properties;
 use gtk::glib;
 use gtk::prelude::*;
@@ -10,6 +11,7 @@ use gtk::subclass::prelude::*;
 use crate::expressions;
 use crate::model;
 use crate::types::MessageSenderId;
+use crate::utils;
 
 #[derive(Clone, Debug, glib::Boxed)]
 #[boxed_type(name = "MessageSender")]
@@ -60,12 +62,12 @@ mod imp {
         pub(super) sender: OnceCell<MessageSender>,
         #[property(get, set, construct_only)]
         pub(super) is_outgoing: OnceCell<bool>,
-        #[property(get, set, construct_only)]
-        pub(super) can_be_edited: OnceCell<bool>,
-        #[property(get, set, construct_only)]
-        pub(super) can_be_deleted_only_for_self: OnceCell<bool>,
-        #[property(get, set, construct_only)]
-        pub(super) can_be_deleted_for_all_users: OnceCell<bool>,
+        #[property(get, set)]
+        pub(super) can_be_edited: Cell<bool>,
+        #[property(get, set)]
+        pub(super) can_be_deleted_only_for_self: Cell<bool>,
+        #[property(get, set)]
+        pub(super) can_be_deleted_for_all_users: Cell<bool>,
         #[property(get, set, construct_only)]
         pub(super) sending_state: OnceCell<Option<model::BoxedMessageSendingState>>,
         #[property(get, set, construct_only)]
@@ -117,15 +119,6 @@ impl Message {
                 model::MessageSender::new(&chat.session_(), &td_message.sender_id),
             )
             .property("is-outgoing", td_message.is_outgoing)
-            .property("can-be-edited", td_message.can_be_edited)
-            .property(
-                "can-be-deleted-only-for-self",
-                td_message.can_be_deleted_only_for_self,
-            )
-            .property(
-                "can-be-deleted-for-all-users",
-                td_message.can_be_deleted_for_all_users,
-            )
             .property(
                 "sending-state",
                 td_message
@@ -154,6 +147,28 @@ impl Message {
         imp.content
             .replace(model::BoxedMessageContent(td_message.content));
         imp.is_edited.set(td_message.edit_date > 0);
+
+        utils::spawn(clone!(@weak obj, @weak chat => async move {
+            let message_id = obj.id();
+            match tdlib::functions::get_message_properties(
+                chat.id(),
+                message_id,
+                chat.session_().client_().id(),
+            )
+            .await
+            {
+                Ok(tdlib::enums::MessageProperties::MessageProperties(properties)) => {
+                    obj.set_can_be_edited(properties.can_be_edited);
+                    obj.set_can_be_deleted_only_for_self(
+                        properties.can_be_deleted_only_for_self,
+                    );
+                    obj.set_can_be_deleted_for_all_users(
+                        properties.can_be_deleted_for_all_users,
+                    );
+                }
+                Err(e) => log::warn!("Error getting message properties: {e:?}"),
+            }
+        }));
 
         obj
     }
@@ -230,8 +245,7 @@ impl Message {
                             .chain_property::<model::Chat>("title")
                             .upcast()
                     }
-                    model::MessageForwardOrigin::HiddenUser { sender_name }
-                    | model::MessageForwardOrigin::MessageImport { sender_name } => {
+                    model::MessageForwardOrigin::HiddenUser { sender_name } => {
                         gtk::ConstantExpression::new(sender_name).upcast()
                     }
                 })

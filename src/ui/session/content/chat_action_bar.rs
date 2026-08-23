@@ -451,7 +451,7 @@ impl ChatActionBar {
         if let Some(formatted_text) = self.imp().message_entry.as_markdown().await {
             let content = tdlib::types::InputMessageText {
                 text: formatted_text,
-                disable_web_page_preview: false,
+                link_preview_options: None,
                 clear_draft: true,
             };
 
@@ -531,16 +531,21 @@ impl ChatActionBar {
                     ChatActionBarState::Replying(id) => id,
                     _ => 0,
                 };
-                let reply_to = Some(tdlib::enums::MessageReplyTo::Message(
-                    tdlib::types::MessageReplyToMessage {
-                        chat_id,
-                        message_id,
-                    },
-                ));
+                let reply_to = if message_id != 0 {
+                    Some(tdlib::enums::InputMessageReplyTo::Message(
+                        tdlib::types::InputMessageReplyToMessage {
+                            message_id,
+                            quote: None,
+                            checklist_task_id: 0,
+                        },
+                    ))
+                } else {
+                    None
+                };
 
                 // Send the message
                 let result =
-                    tdlib::functions::send_message(chat_id, 0, reply_to, None, message, client_id)
+                    tdlib::functions::send_message(chat_id, None, reply_to, None, message, client_id)
                         .await;
                 if let Err(e) = result {
                     log::warn!("Error sending a message: {:?}", e);
@@ -602,18 +607,31 @@ impl ChatActionBar {
                 } else {
                     0
                 };
+            let reply_to = if reply_to_message_id != 0 {
+                Some(tdlib::enums::InputMessageReplyTo::Message(
+                    tdlib::types::InputMessageReplyToMessage {
+                        message_id: reply_to_message_id,
+                        quote: None,
+                        checklist_task_id: 0,
+                    },
+                ))
+            } else {
+                None
+            };
             let draft_message =
                 self.compose_text_message()
                     .await
                     .map(|message| tdlib::types::DraftMessage {
-                        reply_to_message_id,
+                        reply_to,
                         date: glib::DateTime::now_local().unwrap().to_unix() as i32,
                         input_message_text: message,
+                        effect_id: 0,
+                        suggested_post_info: None,
                     });
 
             // Save draft message
             let result =
-                tdlib::functions::set_chat_draft_message(chat_id, 0, draft_message, client_id)
+                tdlib::functions::set_chat_draft_message(chat_id, None, draft_message, client_id)
                     .await;
             if let Err(e) = result {
                 log::warn!("Error setting a draft message: {:?}", e);
@@ -624,8 +642,8 @@ impl ChatActionBar {
     fn load_draft_message(&self, message: model::BoxedDraftMessage) {
         let imp = self.imp();
 
-        if message.0.reply_to_message_id != 0 {
-            self.set_state(ChatActionBarState::Replying(message.0.reply_to_message_id));
+        if let Some(tdlib::enums::InputMessageReplyTo::Message(reply_to)) = &message.0.reply_to {
+            self.set_state(ChatActionBarState::Replying(reply_to.message_id));
         } else {
             self.set_state(ChatActionBarState::Composing);
         }
@@ -659,7 +677,7 @@ impl ChatActionBar {
 
             // Send typing action
             let result =
-                tdlib::functions::send_chat_action(chat_id, 0, Some(action), client_id).await;
+                tdlib::functions::send_chat_action(chat_id, None, Some(action), client_id).await;
             if result.is_ok() {
                 glib::timeout_add_seconds_local_once(
                     5,

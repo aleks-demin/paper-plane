@@ -251,8 +251,7 @@ impl Row {
                             avatar.set_custom_text(None);
                             avatar.set_item(Some(chat.upcast()));
                         }
-                        model::MessageForwardOrigin::HiddenUser { sender_name }
-                        | model::MessageForwardOrigin::MessageImport { sender_name } => {
+                        model::MessageForwardOrigin::HiddenUser { sender_name } => {
                             avatar.set_item(None);
                             avatar.set_custom_text(Some(&sender_name));
                         }
@@ -421,7 +420,7 @@ fn can_send_messages_in_chat(chat: &model::Chat) -> bool {
         .map(|s| match s.0 {
             Creator(_) => true,
             Administrator(_) => true,
-            Member => chat.permissions().0.can_send_basic_messages,
+            Member(_) => chat.permissions().0.can_send_basic_messages,
             Restricted(data) => {
                 chat.permissions().0.can_send_basic_messages
                     && data.permissions.can_send_basic_messages
