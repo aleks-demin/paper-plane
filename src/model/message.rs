@@ -148,27 +148,33 @@ impl Message {
             .replace(model::BoxedMessageContent(td_message.content));
         imp.is_edited.set(td_message.edit_date > 0);
 
-        utils::spawn(clone!(@weak obj, @weak chat => async move {
-            let message_id = obj.id();
-            match tdlib::functions::get_message_properties(
-                chat.id(),
-                message_id,
-                chat.session_().client_().id(),
-            )
-            .await
-            {
-                Ok(tdlib::enums::MessageProperties::MessageProperties(properties)) => {
-                    obj.set_can_be_edited(properties.can_be_edited);
-                    obj.set_can_be_deleted_only_for_self(
-                        properties.can_be_deleted_only_for_self,
-                    );
-                    obj.set_can_be_deleted_for_all_users(
-                        properties.can_be_deleted_for_all_users,
-                    );
+        utils::spawn(clone!(
+            #[weak]
+            obj,
+            #[weak]
+            chat,
+            async move {
+                let message_id = obj.id();
+                match tdlib::functions::get_message_properties(
+                    chat.id(),
+                    message_id,
+                    chat.session_().client_().id(),
+                )
+                .await
+                {
+                    Ok(tdlib::enums::MessageProperties::MessageProperties(properties)) => {
+                        obj.set_can_be_edited(properties.can_be_edited);
+                        obj.set_can_be_deleted_only_for_self(
+                            properties.can_be_deleted_only_for_self,
+                        );
+                        obj.set_can_be_deleted_for_all_users(
+                            properties.can_be_deleted_for_all_users,
+                        );
+                    }
+                    Err(e) => log::warn!("Error getting message properties: {e:?}"),
                 }
-                Err(e) => log::warn!("Error getting message properties: {e:?}"),
             }
-        }));
+        ));
 
         obj
     }
