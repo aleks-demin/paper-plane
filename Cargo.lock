@@ -1288,6 +1288,7 @@ dependencies = [
  "image",
  "indexmap 2.14.0",
  "libadwaita",
+ "libc",
  "libshumate",
  "locale_config",
  "log",

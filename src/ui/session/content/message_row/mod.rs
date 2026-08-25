@@ -4,6 +4,7 @@ mod document;
 mod indicators;
 mod label;
 mod location;
+mod media_download_button;
 mod media_picture;
 mod photo;
 mod reply;
@@ -32,6 +33,7 @@ pub(crate) use self::document::StatusIndicator as MessageDocumentStatusIndicator
 pub(crate) use self::indicators::MessageIndicators;
 pub(crate) use self::label::MessageLabel;
 pub(crate) use self::location::MessageLocation;
+pub(crate) use self::media_download_button::MediaDownloadButton;
 pub(crate) use self::media_picture::MediaPicture;
 pub(crate) use self::photo::MessagePhoto;
 pub(crate) use self::reply::MessageReply;
@@ -342,9 +344,7 @@ impl Row {
             };
 
             match message_.content().0 {
-                // FIXME: Re-enable MessageVideo when
-                // https://github.com/paper-plane-developers/paper-plane/issues/410 is fixed
-                MessageAnimation(_) /*| MessageContent::MessageVideo(_)*/ => {
+                MessageAnimation(_) | MessageVideo(_) => {
                     self.update_specific_content::<_, ui::MessageVideo>(message_);
                 }
                 MessageAnimatedEmoji(data)

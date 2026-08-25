@@ -17,6 +17,7 @@ gettext-rs = { version = "=0.7.0", features = ["gettext-system"] }
 gtk = { version = "0.9", package = "gtk4", features = ["gnome_47", "blueprint"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 indexmap = "2"
+libc = "0.2"
 locale_config = "0.3"
 log = "0.4"
 ori = { git = "https://github.com/paper-plane-developers/origami.git", tag="v0.9.0", package = "origami" }

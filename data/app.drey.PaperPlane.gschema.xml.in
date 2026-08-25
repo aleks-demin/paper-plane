@@ -31,5 +31,35 @@
       <summary>Color Scheme</summary>
       <description>The color scheme to be used in the app</description>
     </key>
+    <key name="auto-download-media" type="b">
+      <default>true</default>
+      <summary>Auto-Download Media</summary>
+      <description>Whether to download media automatically. When this is true, the per-content settings below are used to decide which media is downloaded.</description>
+    </key>
+    <key name="auto-download-photos" type="b">
+      <default>true</default>
+      <summary>Auto-Download Photos</summary>
+      <description>Whether to download photos automatically.</description>
+    </key>
+    <key name="auto-download-videos" type="b">
+      <default>true</default>
+      <summary>Auto-Download Videos</summary>
+      <description>Whether to download videos automatically.</description>
+    </key>
+    <key name="auto-download-videos-max-size" type="u">
+      <default>15728640</default>
+      <summary>Maximum Video Size</summary>
+      <description>The maximum size (in bytes) of a video that should be downloaded automatically. Videos larger than this will be shown as a preview with a download button.</description>
+    </key>
+    <key name="auto-download-files" type="b">
+      <default>true</default>
+      <summary>Auto-Download Files</summary>
+      <description>Whether to download files automatically.</description>
+    </key>
+    <key name="auto-download-files-max-size" type="u">
+      <default>3145728</default>
+      <summary>Maximum File Size</summary>
+      <description>The maximum size (in bytes) of a file that should be downloaded automatically. Files larger than this will be shown as a preview with a download button.</description>
+    </key>
   </schema>
 </schemalist>

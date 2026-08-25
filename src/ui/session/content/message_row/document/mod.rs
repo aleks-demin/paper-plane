@@ -4,7 +4,7 @@ mod status_indicator;
 use std::cell::RefCell;
 use std::sync::OnceLock;
 
-use file_status::FileStatus;
+pub(crate) use self::file_status::FileStatus;
 use glib::clone;
 use gtk::gdk;
 use gtk::gio;
@@ -15,6 +15,7 @@ use gtk::CompositeTemplate;
 
 pub(crate) use self::status_indicator::StatusIndicator;
 use crate::model;
+use crate::model::MediaType;
 use crate::ui;
 use crate::ui::MessageBaseExt;
 use crate::utils;
@@ -177,44 +178,73 @@ impl MessageDocument {
                 return;
             }
             FileStatus::CanBeDownloaded => {
-                // Download file
-                click.connect_released(clone!(
-                    #[weak(rename_to = obj)]
-                    self,
-                    #[weak]
-                    session,
-                    move |click, _, _, _| {
-                        // TODO: Fix bug mentioned here
-                        // https://github.com/paper-plane-developers/paper-plane/pull/372#discussion_r968841370
-                        session.download_file_with_updates(
-                            file_id,
-                            clone!(
-                                #[weak]
-                                obj,
-                                #[weak]
-                                session,
-                                move |file| {
-                                    obj.update_status(file, session);
-                                }
-                            ),
-                        );
+                let size = file.size.max(file.expected_size) as u64;
 
-                        let imp = obj.imp();
-
-                        imp.status_indicator
-                            .set_status(FileStatus::Downloading(0.0));
-                        let handler_id = click.connect_released(clone!(
+                // Download the file automatically if the settings allow it.
+                if session
+                    .media_manager()
+                    .should_auto_download(MediaType::File, size)
+                {
+                    session.download_file_with_updates(
+                        file_id,
+                        clone!(
+                            #[weak(rename_to = obj)]
+                            self,
                             #[weak]
                             session,
-                            move |_, _, _, _| {
-                                session.cancel_download_file(file_id);
+                            move |file| {
+                                obj.update_status(file, session);
                             }
-                        ));
-                        if let Some(handler_id) = imp.status_handler_id.replace(Some(handler_id)) {
-                            click.disconnect(handler_id);
+                        ),
+                    );
+
+                    imp.status_indicator
+                        .set_status(FileStatus::Downloading(0.0));
+
+                    // Ignore clicks while the file is downloading automatically.
+                    click.connect_released(|_, _, _, _| {})
+                } else {
+                    // Download file
+                    click.connect_released(clone!(
+                        #[weak(rename_to = obj)]
+                        self,
+                        #[weak]
+                        session,
+                        move |click, _, _, _| {
+                            // TODO: Fix bug mentioned here
+                            // https://github.com/paper-plane-developers/paper-plane/pull/372#discussion_r968841370
+                            session.download_file_with_updates(
+                                file_id,
+                                clone!(
+                                    #[weak]
+                                    obj,
+                                    #[weak]
+                                    session,
+                                    move |file| {
+                                        obj.update_status(file, session);
+                                    }
+                                ),
+                            );
+
+                            let imp = obj.imp();
+
+                            imp.status_indicator
+                                .set_status(FileStatus::Downloading(0.0));
+                            let handler_id = click.connect_released(clone!(
+                                #[weak]
+                                session,
+                                move |_, _, _, _| {
+                                    session.cancel_download_file(file_id);
+                                }
+                            ));
+                            if let Some(handler_id) =
+                                imp.status_handler_id.replace(Some(handler_id))
+                            {
+                                click.disconnect(handler_id);
+                            }
                         }
-                    }
-                ))
+                    ))
+                }
             }
             FileStatus::Downloaded => {
                 // Open file

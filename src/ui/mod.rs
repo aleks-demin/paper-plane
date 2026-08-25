@@ -37,6 +37,7 @@ pub(crate) use self::session::ContactRow;
 pub(crate) use self::session::ContactsWindow;
 pub(crate) use self::session::Content;
 pub(crate) use self::session::EventRow;
+pub(crate) use self::session::MediaDownloadButton;
 pub(crate) use self::session::MediaPicture;
 pub(crate) use self::session::MessageBase;
 pub(crate) use self::session::MessageBaseExt;

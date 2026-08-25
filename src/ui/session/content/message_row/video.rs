@@ -9,7 +9,9 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::CompositeTemplate;
 
+use super::document::FileStatus;
 use crate::model;
+use crate::model::MediaType;
 use crate::ui;
 use crate::ui::MessageBaseExt;
 use crate::utils;
@@ -21,6 +23,7 @@ mod imp {
     #[template(resource = "/app/drey/paper-plane/ui/session/content/message_row/video.ui")]
     pub(crate) struct MessageVideo {
         pub(super) handler_id: RefCell<Option<glib::SignalHandlerId>>,
+        pub(super) status_handler_id: RefCell<Option<glib::SignalHandlerId>>,
         pub(super) message: glib::WeakRef<model::Message>,
         pub(super) is_animation: Cell<bool>,
         #[template_child]
@@ -29,6 +32,10 @@ mod imp {
         pub(super) picture: TemplateChild<ui::MediaPicture>,
         #[template_child]
         pub(super) indicator: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub(super) download_button: TemplateChild<ui::MediaDownloadButton>,
+        #[template_child]
+        pub(super) click: TemplateChild<gtk::GestureClick>,
     }
 
     #[glib::object_subclass]
@@ -117,6 +124,25 @@ impl ui::MessageBaseExt for MessageVideo {
 }
 
 impl MessageVideo {
+    /// Replaces the click gesture handler of the media preview.
+    fn replace_click_handler<F: Fn(&gtk::GestureClick, i32, f64, f64) + 'static>(&self, f: F) {
+        let click = &*self.imp().click;
+
+        let handler_id = click.connect_released(f);
+
+        if let Some(handler_id) = self.imp().status_handler_id.replace(Some(handler_id)) {
+            click.disconnect(handler_id);
+        }
+    }
+
+    fn disconnect_click_handler(&self) {
+        let imp = self.imp();
+
+        if let Some(handler_id) = imp.status_handler_id.take() {
+            imp.click.disconnect(handler_id);
+        }
+    }
+
     fn update_content(
         &self,
         content: tdlib::enums::MessageContent,
@@ -153,36 +179,120 @@ impl MessageVideo {
         imp.picture.set_aspect_ratio(aspect_ratio);
 
         if file.local.is_downloading_completed {
+            imp.download_button.set_visible(false);
+            self.disconnect_click_handler();
+
             self.load_video(&file.local.path);
         } else {
-            imp.picture.set_paintable(
-                minithumbnail
-                    .and_then(|m| {
-                        gdk::Texture::from_bytes(&glib::Bytes::from_owned(glib::base64_decode(
-                            &m.data,
-                        )))
-                        .ok()
-                    })
-                    .as_ref(),
-            );
+            let size = file.size.max(file.expected_size) as u64;
 
-            let file_id = file.id;
-            utils::spawn(clone!(
+            if session
+                .media_manager()
+                .should_auto_download(MediaType::Video, size)
+            {
+                imp.download_button.set_visible(false);
+                self.disconnect_click_handler();
+
+                let file_id = file.id;
+                utils::spawn(clone!(
+                    #[weak(rename_to = obj)]
+                    self,
+                    #[weak]
+                    session,
+                    async move {
+                        obj.download_video(file_id, &session).await;
+                    }
+                ));
+            } else {
+                // Show a low-resolution preview of the video while it is not
+                // downloaded.
+                imp.picture.set_paintable(
+                    minithumbnail
+                        .and_then(|m| {
+                            gdk::Texture::from_bytes(&glib::Bytes::from_owned(glib::base64_decode(
+                                &m.data,
+                            )))
+                            .ok()
+                        })
+                        .as_ref(),
+                );
+
+                imp.download_button.set_status(FileStatus::CanBeDownloaded);
+                imp.download_button.set_visible(true);
+
+                let file_id = file.id;
+                self.connect_start_download(file_id, session);
+            }
+        }
+    }
+
+    /// Clicking the media preview starts the download.
+    fn connect_start_download(&self, file_id: i32, session: &model::ClientStateSession) {
+        self.replace_click_handler(clone!(
+            #[weak(rename_to = obj)]
+            self,
+            #[weak]
+            session,
+            move |_, _, _, _| {
+                obj.start_download(file_id, &session);
+            }
+        ));
+    }
+
+    fn start_download(&self, file_id: i32, session: &model::ClientStateSession) {
+        let imp = self.imp();
+
+        imp.download_button
+            .set_status(FileStatus::Downloading(0.0));
+
+        // Show the progress of the download on the download button.
+        session.media_manager().download_file_with_updates(
+            file_id,
+            clone!(
                 #[weak(rename_to = obj)]
                 self,
-                #[weak]
-                session,
-                async move {
-                    obj.download_video(file_id, &session).await;
+                move |file| {
+                    obj.imp().download_button.set_status(FileStatus::from(&file));
                 }
-            ));
-        }
+            ),
+        );
+
+        // Clicking again cancels the download.
+        self.replace_click_handler(clone!(
+            #[weak(rename_to = obj)]
+            self,
+            #[weak]
+            session,
+            move |_, _, _, _| {
+                session.media_manager().cancel_download_file(file_id);
+                obj.imp()
+                    .download_button
+                    .set_status(FileStatus::CanBeDownloaded);
+                obj.connect_start_download(file_id, &session);
+            }
+        ));
+
+        utils::spawn(clone!(
+            #[weak(rename_to = obj)]
+            self,
+            #[weak]
+            session,
+            async move {
+                obj.download_video(file_id, &session).await;
+            }
+        ));
     }
 
     async fn download_video(&self, file_id: i32, session: &model::ClientStateSession) {
         match session.download_file(file_id).await {
             Ok(file) => {
-                self.load_video(&file.local.path);
+                // The download may have been canceled by the user, in which
+                // case the returned file is not usable.
+                if file.local.is_downloading_completed {
+                    self.load_video(&file.local.path);
+                } else {
+                    log::info!("Video download was canceled");
+                }
             }
             Err(e) => {
                 log::warn!("Failed to download a video: {e:?}");
@@ -192,6 +302,9 @@ impl MessageVideo {
 
     fn load_video(&self, path: &str) {
         let imp = self.imp();
+
+        imp.download_button.set_visible(false);
+        self.disconnect_click_handler();
 
         let media = gtk::MediaFile::for_filename(path);
         media.set_muted(true);

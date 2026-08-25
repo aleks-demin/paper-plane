@@ -1,5 +1,4 @@
 using Gtk 4.0;
-using Adw 1;
 
 template $PaplMessageVideo : $PaplMessageBase {
   layout-manager: BinLayout {};
@@ -8,7 +7,12 @@ template $PaplMessageVideo : $PaplMessageBase {
     styles ["media"]
 
     prefix: Overlay {
-      $PaplMessageMediaPicture picture {}
+      GestureClick click {
+        button: 1;
+      }
+
+      $PaplMessageMediaPicture picture {
+      }
 
       [overlay]
       Label indicator {
@@ -16,6 +20,12 @@ template $PaplMessageVideo : $PaplMessageBase {
         valign: start;
 
         styles ["osd-indicator"]
+      }
+
+      [overlay]
+      $PaplMediaDownloadButton download_button {
+        halign: center;
+        valign: center;
       }
     };
   }

@@ -13,6 +13,9 @@ use crate::config;
 use crate::ui;
 use crate::utils;
 
+/// The number of bytes in a megabyte.
+const MIB: u64 = 1024 * 1024;
+
 mod imp {
     use super::*;
 
@@ -24,6 +27,18 @@ mod imp {
         pub(super) follow_system_colors_switch: TemplateChild<gtk::Switch>,
         #[template_child]
         pub(super) dark_theme_switch: TemplateChild<gtk::Switch>,
+        #[template_child]
+        pub(super) auto_download_media_switch: TemplateChild<gtk::Switch>,
+        #[template_child]
+        pub(super) auto_download_photos_switch: TemplateChild<gtk::Switch>,
+        #[template_child]
+        pub(super) auto_download_videos_switch: TemplateChild<gtk::Switch>,
+        #[template_child]
+        pub(super) auto_download_videos_max_size_spin: TemplateChild<adw::SpinRow>,
+        #[template_child]
+        pub(super) auto_download_files_switch: TemplateChild<gtk::Switch>,
+        #[template_child]
+        pub(super) auto_download_files_max_size_spin: TemplateChild<adw::SpinRow>,
         #[template_child]
         pub(super) cache_size_label: TemplateChild<gtk::Label>,
     }
@@ -177,6 +192,122 @@ impl PreferencesDialog {
             .bind_property("dark", &*imp.dark_theme_switch, "active")
             .flags(glib::BindingFlags::SYNC_CREATE)
             .build();
+
+        // Media download settings handling
+        let settings = gio::Settings::new(config::APP_ID);
+
+        settings.bind(
+            "auto-download-media",
+            &*imp.auto_download_media_switch,
+            "active",
+        )
+        .build();
+        settings.bind(
+            "auto-download-photos",
+            &*imp.auto_download_photos_switch,
+            "active",
+        )
+        .build();
+        settings.bind(
+            "auto-download-videos",
+            &*imp.auto_download_videos_switch,
+            "active",
+        )
+        .build();
+        settings.bind(
+            "auto-download-files",
+            &*imp.auto_download_files_switch,
+            "active",
+        )
+        .build();
+
+        // The maximum sizes are stored in bytes but shown in megabytes.
+        // The adjustments are created in code because this version of the
+        // blueprint compiler cannot declare them inside templates.
+        for (spin, default_mb) in [
+            (&*imp.auto_download_videos_max_size_spin, 15.0),
+            (&*imp.auto_download_files_max_size_spin, 3.0),
+        ] {
+            let adjustment = gtk::Adjustment::new(default_mb, 1.0, 2048.0, 1.0, 10.0, 0.0);
+            spin.set_property("adjustment", &adjustment);
+        }
+
+        imp.auto_download_videos_max_size_spin
+            .set_value(settings.uint("auto-download-videos-max-size") as f64 / MIB as f64);
+        imp.auto_download_videos_max_size_spin
+            .connect_notify_local(
+                Some("value"),
+                clone!(
+                    #[weak]
+                    settings,
+                    move |spin, _| {
+                        settings
+                            .set_uint(
+                                "auto-download-videos-max-size",
+                                (spin.value() * MIB as f64) as u32,
+                            )
+                            .unwrap();
+                    }
+                ),
+            );
+
+        imp.auto_download_files_max_size_spin
+            .set_value(settings.uint("auto-download-files-max-size") as f64 / MIB as f64);
+        imp.auto_download_files_max_size_spin
+            .connect_notify_local(
+                Some("value"),
+                clone!(
+                    #[weak]
+                    settings,
+                    move |spin, _| {
+                        settings
+                            .set_uint(
+                                "auto-download-files-max-size",
+                                (spin.value() * MIB as f64) as u32,
+                            )
+                            .unwrap();
+                    }
+                ),
+            );
+
+        // Make the media rows insensitive when auto-downloading is disabled and
+        // the maximum size rows also depend on their content type switches.
+        {
+            let media_switch = (*imp.auto_download_media_switch).clone();
+            let photos_switch = (*imp.auto_download_photos_switch).clone();
+            let videos_switch = (*imp.auto_download_videos_switch).clone();
+            let files_switch = (*imp.auto_download_files_switch).clone();
+            let videos_spin = (*imp.auto_download_videos_max_size_spin).clone();
+            let files_spin = (*imp.auto_download_files_max_size_spin).clone();
+
+            // The closure needs its own copies of the widgets because the
+            // originals are used to connect and trigger it below.
+            let update_media_sensitivity = {
+                let media_switch = media_switch.clone();
+                let photos_switch = photos_switch.clone();
+                let videos_switch = videos_switch.clone();
+                let files_switch = files_switch.clone();
+                let videos_spin = videos_spin.clone();
+                let files_spin = files_spin.clone();
+
+                move |_: &gtk::Switch| {
+                    let master = media_switch.is_active();
+
+                    photos_switch.set_sensitive(master);
+                    videos_switch.set_sensitive(master);
+                    files_switch.set_sensitive(master);
+                    videos_spin.set_sensitive(master && videos_switch.is_active());
+                    files_spin.set_sensitive(master && files_switch.is_active());
+                }
+            };
+
+            // Set the initial sensitivity of the media rows.
+            update_media_sensitivity(&media_switch);
+
+            media_switch.connect_active_notify(update_media_sensitivity.clone());
+            videos_switch.connect_active_notify(update_media_sensitivity.clone());
+            files_switch.connect_active_notify(update_media_sensitivity);
+        }
     }
 
     async fn calculate_cache_size(&self) {

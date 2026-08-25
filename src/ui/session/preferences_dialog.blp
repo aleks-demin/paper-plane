@@ -26,6 +26,68 @@ template $PaplPreferencesDialog : Adw.PreferencesDialog {
     }
 
     Adw.PreferencesGroup {
+      title: _("Media");
+
+      Adw.ActionRow {
+        title: _("Auto-Download Media");
+        activatable-widget: auto_download_media_switch;
+
+        Switch auto_download_media_switch {
+          valign: center;
+        }
+      }
+
+      Adw.ActionRow {
+        title: _("Photos");
+        activatable-widget: auto_download_photos_switch;
+
+        Switch auto_download_photos_switch {
+          valign: center;
+        }
+      }
+
+      Adw.ActionRow {
+        title: _("Videos");
+        activatable-widget: auto_download_videos_switch;
+
+        Switch auto_download_videos_switch {
+          valign: center;
+        }
+      }
+
+      Adw.SpinRow auto_download_videos_max_size_spin {
+        title: _("Maximum Video Size");
+
+        [suffix]
+        Label {
+          label: _("MB");
+
+          styles ["dim-label"]
+        }
+      }
+
+      Adw.ActionRow {
+        title: _("Files");
+        activatable-widget: auto_download_files_switch;
+
+        Switch auto_download_files_switch {
+          valign: center;
+        }
+      }
+
+      Adw.SpinRow auto_download_files_max_size_spin {
+        title: _("Maximum File Size");
+
+        [suffix]
+        Label {
+          label: _("MB");
+
+          styles ["dim-label"]
+        }
+      }
+    }
+
+    Adw.PreferencesGroup {
       title: _("Storage");
 
       Adw.ActionRow {

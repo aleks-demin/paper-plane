@@ -111,7 +111,16 @@ fn main() -> glib::ExitCode {
         }
     }
 
-    app.run()
+    let exit_code = app.run();
+
+    // libtdjson destroys its global client manager through C++ static
+    // destructors during process teardown, which races against its
+    // still-running worker threads, leaving the process hanging or
+    // segfaulting after the window is closed. Everything is already
+    // persisted at this point (tdlib writes its database incrementally),
+    // so terminate the process without running any destructors.
+    drop(temp_dir);
+    unsafe { libc::_exit(exit_code.value()) }
 }
 
 /// Global options for the application

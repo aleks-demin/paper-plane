@@ -23,6 +23,7 @@ pub(crate) use self::content::ChatHistoryRow;
 pub(crate) use self::content::ChatInfoWindow;
 pub(crate) use self::content::Content;
 pub(crate) use self::content::EventRow;
+pub(crate) use self::content::MediaDownloadButton;
 pub(crate) use self::content::MediaPicture;
 pub(crate) use self::content::MessageBase;
 pub(crate) use self::content::MessageBaseExt;
