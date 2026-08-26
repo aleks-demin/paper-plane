@@ -81,6 +81,16 @@ template $PaplPreferencesDialog : Adw.PreferencesDialog {
       }
 
       Adw.ActionRow {
+        title: _("Autoplay Videos");
+        subtitle: _("Play videos automatically when they are visible");
+        activatable-widget: autoplay_videos_switch;
+
+        Switch autoplay_videos_switch {
+          valign: center;
+        }
+      }
+
+      Adw.ActionRow {
         title: _("Files");
         activatable-widget: auto_download_files_switch;
 

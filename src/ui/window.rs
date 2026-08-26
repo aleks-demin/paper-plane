@@ -219,10 +219,8 @@ impl Window {
                         log::debug!("Notification {notification_id}: sending with loaded avatar");
                         app.send_notification(Some(&notification_id.to_string()), &notification);
                     } else {
-                        let icon = ui::Avatar::default_icon_for_chat(&chat);
-                        notification.set_icon(&icon);
                         log::debug!(
-                            "Notification {notification_id}: sending with placeholder avatar, downloading {}",
+                            "Notification {notification_id}: sending without icon, downloading {}",
                             avatar_file.id
                         );
                         app.send_notification(Some(&notification_id.to_string()), &notification);
@@ -258,9 +256,7 @@ impl Window {
                         ));
                     }
                 } else {
-                    let icon = ui::Avatar::default_icon_for_chat(&chat);
-                    notification.set_icon(&icon);
-                    log::debug!("Notification {notification_id}: sending with generated avatar");
+                    log::debug!("Notification {notification_id}: sending without icon");
                     app.send_notification(Some(&notification_id.to_string()), &notification);
                 }
             }

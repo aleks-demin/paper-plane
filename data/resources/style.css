@@ -411,6 +411,14 @@ messageindicators,
   font-feature-settings: "tnum";
 }
 
+image.play-overlay {
+  background-color: alpha(black, 0.6);
+  color: white;
+  border-radius: 9999px;
+  padding: 14px;
+  -gtk-icon-size: 24px;
+}
+
 messagebubble messagereply {
   margin: 3px 0;
 }

@@ -38,6 +38,8 @@ mod imp {
         #[template_child]
         pub(super) auto_download_videos_max_size_spin: TemplateChild<adw::SpinRow>,
         #[template_child]
+        pub(super) autoplay_videos_switch: TemplateChild<gtk::Switch>,
+        #[template_child]
         pub(super) auto_download_files_switch: TemplateChild<gtk::Switch>,
         #[template_child]
         pub(super) auto_download_files_max_size_spin: TemplateChild<adw::SpinRow>,
@@ -224,6 +226,9 @@ impl PreferencesDialog {
             "active",
         )
         .build();
+        settings
+            .bind("autoplay-videos", &*imp.autoplay_videos_switch, "active")
+            .build();
         settings.bind(
             "auto-download-files",
             &*imp.auto_download_files_switch,

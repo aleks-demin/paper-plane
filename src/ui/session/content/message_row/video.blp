@@ -23,6 +23,15 @@ template $PaplMessageVideo : $PaplMessageBase {
       }
 
       [overlay]
+      Image play_icon {
+        visible: false;
+        halign: center;
+        valign: center;
+
+        styles ["play-overlay"]
+      }
+
+      [overlay]
       $PaplMediaDownloadButton download_button {
         halign: center;
         valign: center;
