@@ -238,6 +238,13 @@ impl ClientManager {
         let mut list = self.imp().0.borrow_mut();
         if let Entry::Occupied(entry) = list.entry(id) {
             if let tdlib::enums::Update::NotificationGroup(group) = update {
+                log::debug!(
+                    "Received notification group {} for chat {}: {} added, {} removed",
+                    group.notification_group_id,
+                    group.chat_id,
+                    group.added_notifications.len(),
+                    group.removed_notification_ids.len()
+                );
                 let session = entry
                     .get()
                     .state()

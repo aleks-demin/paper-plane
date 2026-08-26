@@ -194,4 +194,18 @@ impl ClientManagerView {
             }
         }
     }
+
+    /// Opens or closes the currently viewed chat of the active session in
+    /// TDLib. While a chat is closed, TDLib creates notifications for it.
+    pub(crate) fn set_chats_open(&self, open: bool) {
+        let mut child = self.first_child();
+        while let Some(ref c) = child {
+            if let Some(session) = c.downcast_ref::<ui::Session>() {
+                session.set_chat_open(open);
+                break;
+            }
+
+            child = c.first_child();
+        }
+    }
 }

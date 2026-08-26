@@ -1,4 +1,4 @@
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefCell};
 
 use adw::prelude::AdwDialogExt;
 use adw::subclass::prelude::*;
@@ -17,6 +17,7 @@ mod imp {
     #[derive(Debug, Default)]
     pub(crate) struct Application {
         pub(super) window: OnceCell<glib::WeakRef<ui::Window>>,
+        pub(super) background_hold: RefCell<Option<gio::ApplicationHoldGuard>>,
     }
 
     #[glib::object_subclass]
@@ -34,17 +35,14 @@ mod imp {
 
             let obj = self.obj();
 
-            if let Some(window) = self.window.get() {
-                window.upgrade().unwrap().present();
-                return;
+            if self.window.get().is_none() {
+                let window = ui::Window::new(&obj);
+                self.window
+                    .set(window.downgrade())
+                    .expect("Window already set.");
             }
 
-            let window = ui::Window::new(&obj);
-            self.window
-                .set(window.downgrade())
-                .expect("Window already set.");
-
-            obj.main_window().present();
+            obj.present_main_window();
         }
 
         fn startup(&self) {
@@ -95,6 +93,30 @@ impl Application {
         self.imp().window.get().unwrap().upgrade().unwrap()
     }
 
+    /// Presents the main window, releasing the background hold if the app was
+    /// running in the background.
+    pub(crate) fn present_main_window(&self) {
+        self.imp().background_hold.take();
+        log::debug!("Presenting main window");
+
+        let window = self.main_window();
+
+        // Re-open the chat that was viewed before entering the background.
+        window.client_manager_view().set_chats_open(true);
+
+        window.present();
+    }
+
+    /// Keeps the app alive in the background while no window is visible, so
+    /// that notifications can still be received.
+    pub(crate) fn enter_background(&self) {
+        let mut hold = self.imp().background_hold.borrow_mut();
+
+        if hold.is_none() {
+            *hold = Some(self.hold());
+        }
+    }
+
     fn setup_gactions(&self) {
         // Quit
         let action_quit = gio::SimpleAction::new("quit", None);
@@ -102,8 +124,12 @@ impl Application {
             #[weak(rename_to = app)]
             self,
             move |_, _| {
-                // This is needed to trigger the delete event and saving the window state
-                app.main_window().close();
+                // Save the window state without going through the close
+                // request, which would keep the app running in the background
+                // instead of quitting.
+                if let Err(err) = app.main_window().save_window_size() {
+                    log::warn!("Failed to save window state, {}", err);
+                }
                 app.quit();
             }
         ));
@@ -127,6 +153,10 @@ impl Application {
             #[weak(rename_to = app)]
             self,
             move |_, data| {
+                // The window may still be hidden while running in the
+                // background, e.g. when the user activated a notification.
+                app.present_main_window();
+
                 let (client_id, chat_id) = data.unwrap().get().unwrap();
                 app.main_window().select_chat(client_id, chat_id);
             }

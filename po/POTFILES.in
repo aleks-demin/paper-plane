@@ -128,8 +128,8 @@ src/ui/session/content/send_media_window.blp
 src/ui/session/content/send_media_window.rs
 src/ui/session/mod.blp
 src/ui/session/mod.rs
-src/ui/session/preferences_window.blp
-src/ui/session/preferences_window.rs
+src/ui/session/preferences_dialog.blp
+src/ui/session/preferences_dialog.rs
 src/ui/session/row.blp
 src/ui/session/row.rs
 src/ui/session/sidebar/avatar.blp

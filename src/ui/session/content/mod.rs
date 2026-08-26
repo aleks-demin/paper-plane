@@ -131,6 +131,10 @@ impl Content {
         self.imp().chat.upgrade()
     }
 
+    pub(crate) fn set_chat_open(&self, open: bool) {
+        self.imp().chat_history.set_chat_open(open);
+    }
+
     fn set_chat(&self, chat: Option<&model::Chat>) {
         if self.chat().as_ref() == chat {
             return;

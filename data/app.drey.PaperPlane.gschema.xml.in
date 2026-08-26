@@ -21,6 +21,11 @@
       <summary>Last used session</summary>
       <description>The directory name of the last used session</description>
     </key>
+    <key name="run-in-background" type="b">
+      <default>true</default>
+      <summary>Run in Background</summary>
+      <description>Whether to keep running after closing the window to continue receiving notifications</description>
+    </key>
     <key name="color-scheme" type="s">
       <choices>
         <choice value="default"/>

@@ -4,6 +4,20 @@ using Adw 1;
 template $PaplPreferencesDialog : Adw.PreferencesDialog {
   Adw.PreferencesPage {
     Adw.PreferencesGroup {
+      title: _("General");
+
+      Adw.ActionRow {
+        title: _("Run in Background");
+        subtitle: _("Keep receiving notifications after closing the window");
+        activatable-widget: run_in_background_switch;
+
+        Switch run_in_background_switch {
+          valign: center;
+        }
+      }
+    }
+
+    Adw.PreferencesGroup {
       title: _("Color Scheme");
 
       Adw.ActionRow {

@@ -349,6 +349,18 @@ impl ChatHistory {
         self.imp().chat.upgrade()
     }
 
+    /// Opens or closes the chat in TDLib. While a chat is opened in TDLib,
+    /// no notifications are created for it.
+    pub(crate) fn set_chat_open(&self, open: bool) {
+        if let Some(chat) = self.chat() {
+            if open {
+                perform_chat_action(&chat, tdlib::functions::open_chat);
+            } else {
+                perform_chat_action(&chat, tdlib::functions::close_chat);
+            }
+        }
+    }
+
     pub(crate) fn set_chat(&self, chat: Option<&model::Chat>) {
         let old_chat = self.chat();
         if chat == old_chat.as_ref() {

@@ -78,8 +78,30 @@ mod imp {
                 log::warn!("Failed to save window state, {}", err);
             }
 
-            // Pass close request on to the parent
-            self.parent_close_request()
+            // If 'Run in Background' is enabled, keep the app alive in the
+            // background by hiding the window instead of closing it, so that
+            // notifications can still be received.
+            if self.settings.boolean("run-in-background") {
+                let app = self
+                    .obj()
+                    .application()
+                    .unwrap()
+                    .downcast::<Application>()
+                    .unwrap();
+                app.enter_background();
+
+                self.obj().set_visible(false);
+
+                // Close the viewed chat in TDLib so that notifications are
+                // created for it while no chat is being viewed.
+                self.obj().client_manager_view().set_chats_open(false);
+                log::debug!("Window hidden, running in the background");
+
+                glib::Propagation::Stop
+            } else {
+                // Pass close request on to the parent
+                self.parent_close_request()
+            }
         }
     }
 
@@ -135,6 +157,12 @@ impl Window {
     ) {
         let app = self.application().unwrap();
 
+        log::debug!(
+            "Handling notification group update: {} added, {} removed",
+            notification_group.0.added_notifications.len(),
+            notification_group.0.removed_notification_ids.len()
+        );
+
         let chat = session.chat(notification_group.0.chat_id);
 
         for notification in notification_group.0.added_notifications {
@@ -142,6 +170,7 @@ impl Window {
 
             let notification = match notification.r#type {
                 tdlib::enums::NotificationType::NewMessage(data) => {
+                    log::debug!("Notification {notification_id}: new message");
                     let message = model::Message::new(&chat, data.message);
                     let mut body = strings::message_content(&message);
 
@@ -159,13 +188,17 @@ impl Window {
                     Some(notification)
                 }
                 tdlib::enums::NotificationType::NewCall(_) => {
+                    log::debug!("Notification {notification_id}: incoming call");
                     let body = gettext("Incoming call");
                     let notification = gio::Notification::new(&chat.title());
                     notification.set_body(Some(&body));
 
                     Some(notification)
                 }
-                _ => None,
+                other => {
+                    log::debug!("Notification {notification_id}: ignoring type {other:?}");
+                    None
+                }
             };
 
             if let Some(notification) = notification {
@@ -177,11 +210,21 @@ impl Window {
                 if let Some(avatar) = chat.avatar() {
                     let avatar_file = &avatar.0;
                     if avatar_file.local.is_downloading_completed {
-                        if let Ok(texture) = gdk::Texture::from_filename(&avatar_file.local.path) {
-                            notification.set_icon(&texture);
+                        match gdk::Texture::from_filename(&avatar_file.local.path) {
+                            Ok(texture) => notification.set_icon(&texture),
+                            Err(e) => log::warn!(
+                                "Notification {notification_id}: failed to load avatar texture: {e:?}"
+                            ),
                         }
+                        log::debug!("Notification {notification_id}: sending with loaded avatar");
                         app.send_notification(Some(&notification_id.to_string()), &notification);
                     } else {
+                        let icon = ui::Avatar::default_icon_for_chat(&chat);
+                        notification.set_icon(&icon);
+                        log::debug!(
+                            "Notification {notification_id}: sending with placeholder avatar, downloading {}",
+                            avatar_file.id
+                        );
                         app.send_notification(Some(&notification_id.to_string()), &notification);
 
                         let file_id = avatar_file.id;
@@ -199,6 +242,9 @@ impl Window {
                                             gdk::Texture::from_filename(file.local.path).unwrap();
                                         notification.set_icon(&texture);
 
+                                        log::debug!(
+                                            "Notification {notification_id}: re-sending with downloaded avatar"
+                                        );
                                         app.send_notification(
                                             Some(&notification_id.to_string()),
                                             &notification,
@@ -211,16 +257,22 @@ impl Window {
                             }
                         ));
                     }
+                } else {
+                    let icon = ui::Avatar::default_icon_for_chat(&chat);
+                    notification.set_icon(&icon);
+                    log::debug!("Notification {notification_id}: sending with generated avatar");
+                    app.send_notification(Some(&notification_id.to_string()), &notification);
                 }
             }
         }
 
         for notification_id in notification_group.0.removed_notification_ids {
+            log::debug!("Notification {notification_id}: withdrawing");
             app.withdraw_notification(&notification_id.to_string());
         }
     }
 
-    fn save_window_size(&self) -> Result<(), glib::BoolError> {
+    pub(crate) fn save_window_size(&self) -> Result<(), glib::BoolError> {
         let imp = self.imp();
 
         let (width, height) = self.default_size();

@@ -215,6 +215,10 @@ impl Session {
         self.imp().content.handle_paste_action();
     }
 
+    pub(crate) fn set_chat_open(&self, open: bool) {
+        self.imp().content.set_chat_open(open);
+    }
+
     pub(crate) fn begin_chats_search(&self) {
         let imp = self.imp();
         imp.split_view.set_show_content(false);

@@ -24,6 +24,8 @@ mod imp {
     pub(crate) struct PreferencesDialog {
         pub(super) session: OnceCell<ui::Session>,
         #[template_child]
+        pub(super) run_in_background_switch: TemplateChild<gtk::Switch>,
+        #[template_child]
         pub(super) follow_system_colors_switch: TemplateChild<gtk::Switch>,
         #[template_child]
         pub(super) dark_theme_switch: TemplateChild<gtk::Switch>,
@@ -193,9 +195,17 @@ impl PreferencesDialog {
             .flags(glib::BindingFlags::SYNC_CREATE)
             .build();
 
-        // Media download settings handling
+        // 'Run in Background' switch state handling
         let settings = gio::Settings::new(config::APP_ID);
+        settings
+            .bind(
+                "run-in-background",
+                &*imp.run_in_background_switch,
+                "active",
+            )
+            .build();
 
+        // Media download settings handling
         settings.bind(
             "auto-download-media",
             &*imp.auto_download_media_switch,
