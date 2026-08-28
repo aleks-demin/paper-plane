@@ -79,7 +79,14 @@ mod imp {
     #[derive(Debug, Properties, Default)]
     #[properties(wrapper_type = super::Chat)]
     pub(crate) struct Chat {
-        pub(super) messages: RefCell<HashMap<i64, model::Message>>,
+        pub(super) messages: RefCell<HashMap<MessageId, glib::WeakRef<model::Message>>>,
+        /// Cache of the messages that are replied to by the messages of this
+        /// chat, keyed by `(chat_id, message_id)`. A value of `None` means
+        /// that the replied message doesn't exist (e.g. it was deleted).
+        ///
+        /// This exists so that reply previews don't issue a TDLib request
+        /// every time they are shown.
+        pub(super) replied_messages: RefCell<HashMap<(ChatId, MessageId), Option<model::Message>>>,
         #[property(get, set, construct_only)]
         pub(super) session: glib::WeakRef<model::ClientStateSession>,
         #[property(get, set, construct_only)]
@@ -92,6 +99,8 @@ mod imp {
         pub(super) title: RefCell<String>,
         #[property(get)]
         pub(super) avatar: RefCell<Option<model::Avatar>>,
+        #[property(get)]
+        pub(super) last_read_inbox_message_id: Cell<MessageId>,
         #[property(get)]
         pub(super) last_read_outbox_message_id: Cell<MessageId>,
         #[property(get)]
@@ -176,14 +185,13 @@ impl Chat {
             .replace(td_chat.block_list.map(model::BoxedBlockList));
         imp.title.replace(td_chat.title);
         imp.avatar.replace(td_chat.photo.map(model::Avatar::from));
+        imp.last_read_inbox_message_id
+            .set(td_chat.last_read_inbox_message_id);
         imp.last_read_outbox_message_id
             .set(td_chat.last_read_outbox_message_id);
         imp.is_marked_as_unread.set(td_chat.is_marked_as_unread);
-        imp.last_message.replace(
-            td_chat
-                .last_message
-                .map(|message| model::Message::new(&obj, message)),
-        );
+        imp.last_message
+            .replace(td_chat.last_message.map(|message| obj.insert_message(message)));
         imp.unread_mention_count.set(td_chat.unread_mention_count);
         imp.unread_count.set(td_chat.unread_count);
         imp.draft_message
@@ -218,7 +226,7 @@ impl Chat {
             }
             ChatIsMarkedAsUnread(update) => self.set_marked_as_unread(update.is_marked_as_unread),
             ChatLastMessage(update) => {
-                self.set_last_message(update.last_message.map(|m| model::Message::new(self, m)));
+                self.set_last_message(update.last_message.map(|m| self.insert_message(m)));
             }
             ChatNotificationSettings(update) => {
                 self.set_notification_settings(model::BoxedChatNotificationSettings(
@@ -229,7 +237,10 @@ impl Chat {
                 self.set_permissions(model::BoxedChatPermissions(update.permissions))
             }
             ChatPhoto(update) => self.set_avatar(update.photo.map(Into::into)),
-            ChatReadInbox(update) => self.set_unread_count(update.unread_count),
+            ChatReadInbox(update) => {
+                self.set_last_read_inbox_message_id(update.last_read_inbox_message_id);
+                self.set_unread_count(update.unread_count);
+            }
             ChatReadOutbox(update) => {
                 self.set_last_read_outbox_message_id(update.last_read_outbox_message_id);
             }
@@ -238,14 +249,20 @@ impl Chat {
                 self.set_unread_mention_count(update.unread_mention_count)
             }
             DeleteMessages(data) => {
-                // FIXME: This should be removed after we notify opened and closed chats to TDLib
-                // See discussion here: https://t.me/tdlibchat/65304
-                if !data.from_cache {
-                    let mut messages = imp.messages.borrow_mut();
+                let mut messages = imp.messages.borrow_mut();
+
+                if data.from_cache {
+                    // The messages have been removed from TDLib's local cache. They are still
+                    // available on the server, so this doesn't affect the UI. We only drop our
+                    // references to them to stay in sync with TDLib's cache.
+                    for id in &data.message_ids {
+                        messages.remove(id);
+                    }
+                } else {
                     let deleted_messages: Vec<model::Message> = data
                         .message_ids
-                        .into_iter()
-                        .filter_map(|id| messages.remove(&id))
+                        .iter()
+                        .filter_map(|id| messages.remove(id).and_then(|m| m.upgrade()))
                         .collect();
 
                     drop(messages);
@@ -270,23 +287,18 @@ impl Chat {
                 }
             }
             MessageSendSucceeded(data) => {
-                let mut messages = imp.messages.borrow_mut();
-                let old_message = messages.remove(&data.old_message_id);
+                let old_message = self.message(data.old_message_id);
+                imp.messages.borrow_mut().remove(&data.old_message_id);
 
-                let message_id = data.message.id;
-                let message = model::Message::new(self, data.message);
-                messages.insert(message_id, message.clone());
+                let message = self.insert_message(data.message);
 
-                drop(messages);
-                self.emit_by_name::<()>("deleted-message", &[&old_message]);
+                if let Some(old_message) = old_message {
+                    self.emit_by_name::<()>("deleted-message", &[&old_message]);
+                }
                 self.emit_by_name::<()>("new-message", &[&message]);
             }
             NewMessage(data) => {
-                let message_id = data.message.id;
-                let message = model::Message::new(self, data.message);
-                imp.messages
-                    .borrow_mut()
-                    .insert(message_id, message.clone());
+                let message = self.insert_message(data.message);
 
                 self.emit_by_name::<()>("new-message", &[&message]);
             }
@@ -330,6 +342,14 @@ impl Chat {
         }
         self.imp().avatar.replace(avatar);
         self.notify_avatar();
+    }
+
+    fn set_last_read_inbox_message_id(&self, id: MessageId) {
+        if self.last_read_inbox_message_id() == id {
+            return;
+        }
+        self.imp().last_read_inbox_message_id.set(id);
+        self.notify_last_read_inbox_message_id();
     }
 
     fn set_last_read_outbox_message_id(&self, id: MessageId) {
@@ -431,7 +451,38 @@ impl Chat {
 
     /// Returns the `Message` of the specified id, if present in the cache.
     pub(crate) fn message(&self, id: MessageId) -> Option<model::Message> {
-        self.imp().messages.borrow().get(&id).cloned()
+        self.imp()
+            .messages
+            .borrow()
+            .get(&id)
+            .and_then(|message| message.upgrade())
+    }
+
+    /// Inserts a TDLib message into the cache and returns the corresponding `Message`.
+    ///
+    /// The cache only holds weak references to its messages, so a `Message` stays alive
+    /// only while somebody else keeps a strong reference to it (e.g. a `ChatHistoryModel`
+    /// or the `last-message` property). If a message with the same id is still alive, it
+    /// is returned instead of creating a new one.
+    fn insert_message(&self, td_message: tdlib::types::Message) -> model::Message {
+        let message_id = td_message.id;
+        let mut messages = self.imp().messages.borrow_mut();
+
+        // Drop the weak references to the messages that are not alive anymore, so that
+        // the cache doesn't grow unboundedly.
+        messages.retain(|_, message| message.upgrade().is_some());
+
+        if let Some(message) = messages.get(&message_id).and_then(|m| m.upgrade()) {
+            return message;
+        }
+
+        let message = model::Message::new(self, td_message);
+
+        let weak_message = glib::WeakRef::new();
+        weak_message.set(Some(&message));
+        messages.insert(message_id, weak_message);
+
+        message
     }
 
     /// Returns the `Message` of the specified id, if present in the cache. Otherwise it
@@ -450,40 +501,87 @@ impl Chat {
         result.map(|r| {
             let tdlib::enums::Message::Message(message) = r;
 
-            self.imp()
-                .messages
-                .borrow_mut()
-                .entry(id)
-                .or_insert_with(|| model::Message::new(self, message))
-                .clone()
+            self.insert_message(message)
         })
     }
 
+    /// Returns the message with the specified id of the chat with the specified id,
+    /// or `None` if the message doesn't exist (e.g. it was deleted).
+    ///
+    /// The result, including negative ones, is cached, so that reply previews
+    /// don't issue a TDLib request every time they are shown. Note that the
+    /// replied message can belong to another chat, e.g. for replies to messages
+    /// in channels' comment sections.
+    pub(crate) async fn fetch_reply_target(
+        &self,
+        chat_id: ChatId,
+        message_id: MessageId,
+    ) -> Result<Option<model::Message>, tdlib::types::Error> {
+        const MAX_CACHED_REPLIED_MESSAGES: usize = 100;
+
+        if let Some(cached) = self
+            .imp()
+            .replied_messages
+            .borrow()
+            .get(&(chat_id, message_id))
+        {
+            return Ok(cached.clone());
+        }
+
+        let result = if chat_id == 0 || chat_id == self.id() {
+            self.fetch_message(message_id).await.map(Some)
+        } else if let Some(chat) = self.session_().try_chat(chat_id) {
+            chat.fetch_message(message_id).await.map(Some)
+        } else {
+            // The chat doesn't exist anymore, so the message doesn't either
+            Ok(None)
+        };
+
+        let mut replied_messages = self.imp().replied_messages.borrow_mut();
+
+        if replied_messages.len() >= MAX_CACHED_REPLIED_MESSAGES {
+            replied_messages.clear();
+        }
+
+        match result {
+            Ok(message) => {
+                replied_messages.insert((chat_id, message_id), message.clone());
+                Ok(message)
+            }
+            // A "MessageIdInvalid" error means that the message doesn't exist
+            // anymore (e.g. it was deleted), so the negative result can be cached
+            Err(err) if err.code == 400 => {
+                replied_messages.insert((chat_id, message_id), None);
+                Ok(None)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Returns the messages of the chat, in reverse chronological order, starting from
+    /// the message with the id `from_id`, or from the last message if `from_id` is 0.
+    ///
+    /// If `offset` is negative, `-offset` messages newer than `from_id` are included in
+    /// the result. See `getChatHistory` in the TDLib documentation for more details.
     pub(crate) async fn get_chat_history(
         &self,
         from_id: MessageId,
+        offset: i32,
         limit: i32,
     ) -> Result<Vec<model::Message>, tdlib::types::Error> {
         let client_id = self.session_().client_().id();
         let result =
-            tdlib::functions::get_chat_history(self.id(), from_id, 0, limit, false, client_id)
+            tdlib::functions::get_chat_history(self.id(), from_id, offset, limit, false, client_id)
                 .await;
 
         let tdlib::enums::Messages::Messages(data) = result?;
 
-        let mut messages = self.imp().messages.borrow_mut();
-        let loaded_messages: Vec<model::Message> = data
+        Ok(data
             .messages
             .into_iter()
             .flatten()
-            .map(|m| model::Message::new(self, m))
-            .collect();
-
-        for message in &loaded_messages {
-            messages.insert(message.id(), message.clone());
-        }
-
-        Ok(loaded_messages)
+            .map(|m| self.insert_message(m))
+            .collect())
     }
 
     pub(crate) async fn mark_as_read(&self) -> Result<(), tdlib::types::Error> {

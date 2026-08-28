@@ -1,6 +1,7 @@
 mod file_status;
 mod status_indicator;
 
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::sync::OnceLock;
 
@@ -30,6 +31,9 @@ mod imp {
         pub(super) handler_id: RefCell<Option<glib::SignalHandlerId>>,
         pub(super) status_handler_id: RefCell<Option<glib::SignalHandlerId>>,
         pub(super) message: glib::WeakRef<model::Message>,
+        /// The file id of the thumbnail that should be downloaded once the
+        /// widget is shown, or 0 if there is none.
+        pub(super) pending_thumbnail_file_id: Cell<i32>,
         #[template_child]
         pub(super) message_bubble: TemplateChild<ui::MessageBubble>,
         #[template_child]
@@ -88,7 +92,13 @@ mod imp {
         }
     }
 
-    impl WidgetImpl for MessageDocument {}
+    impl WidgetImpl for MessageDocument {
+        fn map(&self) {
+            self.parent_map();
+
+            self.obj().maybe_download_thumbnail();
+        }
+    }
     impl ui::MessageBaseImpl for MessageDocument {}
 }
 
@@ -123,14 +133,43 @@ impl ui::MessageBaseExt for MessageDocument {
             }
         ));
         imp.handler_id.replace(Some(handler_id));
-        self.update_document(message);
 
         imp.message.set(Some(message));
+        self.update_document(message);
+
         self.notify("message");
     }
 }
 
 impl MessageDocument {
+    /// Downloads the pending thumbnail, if the widget is shown.
+    fn maybe_download_thumbnail(&self) {
+        let imp = self.imp();
+
+        if !self.is_mapped() || imp.pending_thumbnail_file_id.get() == 0 {
+            return;
+        }
+
+        let file_id = imp.pending_thumbnail_file_id.take();
+
+        let Some(message) = imp.message.upgrade() else {
+            return;
+        };
+        let session = message.chat_().session_();
+
+        utils::spawn(clone!(
+            #[weak(rename_to = obj)]
+            self,
+            async move {
+                if let Ok(file) = session.download_file(file_id).await {
+                    obj.imp()
+                        .file_thumbnail_picture
+                        .set_filename(Some(&file.local.path));
+                }
+            }
+        ));
+    }
+
     fn update_document(&self, message: &model::Message) {
         if let tdlib::enums::MessageContent::MessageDocument(data) = message.content().0 {
             let imp = self.imp();
@@ -304,18 +343,11 @@ impl MessageDocument {
                             .set_paintable(Some(&minithumbnail));
                     }
 
-                    let session = message.chat_().session_();
-                    utils::spawn(clone!(
-                        #[weak(rename_to = obj)]
-                        self,
-                        async move {
-                            if let Ok(file) = session.download_file(thumbnail.file.id).await {
-                                obj.imp()
-                                    .file_thumbnail_picture
-                                    .set_filename(Some(&file.local.path));
-                            }
-                        }
-                    ));
+                    // The thumbnail is downloaded when the widget is shown, so
+                    // that thumbnails that are only scrolled past are not
+                    // downloaded.
+                    imp.pending_thumbnail_file_id.set(thumbnail.file.id);
+                    self.maybe_download_thumbnail();
                 }
             } else {
                 imp.status_indicator.set_masked(true);

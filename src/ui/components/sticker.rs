@@ -10,6 +10,22 @@ use gtk::glib;
 use crate::model;
 use crate::utils;
 
+/// A sticker that should be downloaded once the widget is shown.
+struct PendingDownload {
+    sticker: tdlib::types::Sticker,
+    looped: bool,
+    session: model::ClientStateSession,
+}
+
+impl std::fmt::Debug for PendingDownload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PendingDownload")
+            .field("sticker", &self.sticker.sticker.id)
+            .field("looped", &self.looped)
+            .finish_non_exhaustive()
+    }
+}
+
 mod imp {
     use super::*;
 
@@ -19,6 +35,9 @@ mod imp {
         pub(super) file_id: Cell<i32>,
         pub(super) aspect_ratio: Cell<f64>,
         pub(super) child: RefCell<Option<gtk::Widget>>,
+        /// The sticker to download when the widget is shown, so that stickers
+        /// that are only scrolled past are not downloaded.
+        pub(super) pending_download: RefCell<Option<super::PendingDownload>>,
 
         #[property(get, set = Self::set_longer_side_size)]
         pub(super) longer_side_size: Cell<i32>,
@@ -79,6 +98,12 @@ mod imp {
                 child.allocate(width, height, baseline, None);
             }
         }
+
+        fn map(&self) {
+            self.parent_map();
+
+            self.obj().maybe_start_download();
+        }
     }
 
     impl Sticker {
@@ -114,20 +139,57 @@ impl Sticker {
         let aspect_ratio = sticker.width as f64 / sticker.height as f64;
         imp.aspect_ratio.set(aspect_ratio);
 
-        let format = sticker.format;
+        if sticker.sticker.local.is_downloading_completed {
+            let format = sticker.format;
 
+            utils::spawn(clone!(
+                #[weak(rename_to = obj)]
+                self,
+                async move {
+                    obj.load_sticker(sticker.sticker.local.path, file_id, looped, format)
+                        .await;
+                }
+            ));
+        } else {
+            // The download is started when the widget is shown.
+            *imp.pending_download.borrow_mut() = Some(PendingDownload {
+                sticker,
+                looped,
+                session,
+            });
+            self.maybe_start_download();
+        }
+    }
+
+    /// Downloads the pending sticker, if the widget is shown.
+    fn maybe_start_download(&self) {
+        let imp = self.imp();
+
+        if !self.is_mapped() {
+            return;
+        }
+
+        let Some(pending) = imp.pending_download.borrow_mut().take() else {
+            return;
+        };
+
+        let file_id = pending.sticker.sticker.id;
+        let is_completed = pending.sticker.sticker.local.is_downloading_completed;
+        let path = pending.sticker.sticker.local.path.clone();
+        let format = pending.sticker.format;
+        let looped = pending.looped;
+        let session = pending.session;
+
+        // The file may have been downloaded in the meantime, e.g. by another
+        // widget showing the same sticker.
         utils::spawn(clone!(
             #[weak(rename_to = obj)]
             self,
-            #[weak]
-            session,
             async move {
-                if sticker.sticker.local.is_downloading_completed {
-                    obj.load_sticker(sticker.sticker.local.path, file_id, looped, format)
-                        .await;
+                if is_completed {
+                    obj.load_sticker(path, file_id, looped, format).await;
                 } else {
-                    obj.download_sticker(file_id, &session, looped, format)
-                        .await
+                    obj.download_sticker(file_id, &session, looped, format).await;
                 }
             }
         ));

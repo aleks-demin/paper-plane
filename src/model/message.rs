@@ -82,6 +82,7 @@ mod imp {
         pub(super) content: RefCell<model::BoxedMessageContent>,
         #[property(get)]
         pub(super) is_edited: Cell<bool>,
+        pub(super) properties_fetched: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -148,16 +149,33 @@ impl Message {
             .replace(model::BoxedMessageContent(td_message.content));
         imp.is_edited.set(td_message.edit_date > 0);
 
+        obj
+    }
+
+    pub(crate) fn chat_(&self) -> model::Chat {
+        self.chat().unwrap()
+    }
+
+    /// Fetches the message properties (`can_be_edited`, `can_be_deleted_*`)
+    /// from TDLib, if not already fetched.
+    ///
+    /// This is done lazily, because the properties are only needed when the
+    /// context menu of a message is opened, and fetching them for every
+    /// message in the history would be wasteful.
+    pub(crate) fn fetch_properties(&self) {
+        if self.imp().properties_fetched.get() {
+            return;
+        }
+        self.imp().properties_fetched.set(true);
+
         utils::spawn(clone!(
-            #[weak]
-            obj,
-            #[weak]
-            chat,
+            #[weak(rename_to = obj)]
+            self,
             async move {
-                let message_id = obj.id();
+                let chat = obj.chat_();
                 match tdlib::functions::get_message_properties(
                     chat.id(),
-                    message_id,
+                    obj.id(),
                     chat.session_().client_().id(),
                 )
                 .await
@@ -175,12 +193,6 @@ impl Message {
                 }
             }
         ));
-
-        obj
-    }
-
-    pub(crate) fn chat_(&self) -> model::Chat {
-        self.chat().unwrap()
     }
 
     pub(crate) fn handle_update(&self, update: tdlib::enums::Update) {

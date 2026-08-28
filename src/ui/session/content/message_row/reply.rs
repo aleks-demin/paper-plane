@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::cell::RefCell;
 
 use gettextrs::gettext;
@@ -23,6 +24,13 @@ mod imp {
     pub(crate) struct MessageReply {
         pub(super) sender_color_class: RefCell<Option<String>>,
         pub(super) bindings: RefCell<Vec<gtk::ExpressionWatch>>,
+        pub(super) reply_to_message_id: Cell<i64>,
+        pub(super) reply_to_chat_id: Cell<i64>,
+        /// Whether the replied message is being fetched.
+        pub(super) is_loading: Cell<bool>,
+        /// Whether the replied message has been fetched (or is known to not
+        /// exist anymore).
+        pub(super) is_resolved: Cell<bool>,
 
         #[property(get, set, construct_only)]
         pub(super) message: glib::WeakRef<model::Message>,
@@ -67,16 +75,23 @@ mod imp {
         }
 
         fn constructed(&self) {
-            self.message_label.set_label(&gettext("Loading…"));
+            self.parent_constructed();
 
             let obj = self.obj();
-            utils::spawn(clone!(
+
+            self.message_label.set_label(&gettext("Loading…"));
+
+            let gesture = gtk::GestureClick::new();
+            gesture.connect_released(clone!(
                 #[weak]
                 obj,
-                async move {
-                    obj.load_replied_message().await;
+                move |_, n_press, _, _| {
+                    if n_press == 1 {
+                        obj.jump_to_replied_message();
+                    }
                 }
             ));
+            obj.add_controller(gesture);
         }
 
         fn dispose(&self) {
@@ -84,7 +99,29 @@ mod imp {
         }
     }
 
-    impl WidgetImpl for MessageReply {}
+    impl WidgetImpl for MessageReply {
+        fn map(&self) {
+            self.parent_map();
+
+            // Fetch the replied message only when the widget is actually shown.
+            // The result is cached by the chat, so the fetch is done at most
+            // once per replied message.
+            if !self.is_loading.get() && !self.is_resolved.get() {
+                self.is_loading.set(true);
+
+                let obj = self.obj();
+
+                utils::spawn(clone!(
+                    #[weak]
+                    obj,
+                    async move {
+                        obj.load_replied_message().await;
+                        obj.imp().is_loading.set(false);
+                    }
+                ));
+            }
+        }
+    }
 }
 
 glib::wrapper! {
@@ -105,16 +142,26 @@ impl MessageReply {
 
         match message.reply_to().unwrap().0 {
             tdlib::enums::MessageReplyTo::Message(reply_to) => {
-                let chat = if reply_to.chat_id != 0 {
-                    message.chat_().session_().chat(reply_to.chat_id)
-                } else {
-                    message.chat_()
-                };
+                imp.reply_to_message_id.set(reply_to.message_id);
+                imp.reply_to_chat_id.set(reply_to.chat_id);
 
-                match chat.fetch_message(reply_to.message_id).await {
-                    Ok(message) => self.update_from_message(&message, is_outgoing),
-                    Err(_) => imp.message_label.set_label("Deleted message"),
-                };
+                match message
+                    .chat_()
+                    .fetch_reply_target(reply_to.chat_id, reply_to.message_id)
+                    .await
+                {
+                    Ok(Some(replied_message)) => {
+                        self.update_from_message(&replied_message, is_outgoing);
+                        imp.is_resolved.set(true);
+                    }
+                    Ok(None) => {
+                        imp.message_label.set_label(&gettext("Deleted message"));
+                        imp.is_resolved.set(true);
+                    }
+                    // A transient error (e.g. no network connection). The fetch
+                    // is retried when the widget is mapped again.
+                    Err(e) => log::warn!("Error fetching replied message: {e:?}"),
+                }
             }
             tdlib::enums::MessageReplyTo::Story(_) => {
                 // TODO: Implement story replies
@@ -126,6 +173,31 @@ impl MessageReply {
     pub(crate) fn set_max_char_width(&self, n_chars: i32) {
         self.imp().message_label.set_max_width_chars(n_chars);
         self.imp().sender_label.set_max_width_chars(n_chars);
+    }
+
+    /// Asks the chat history to show the replied message.
+    fn jump_to_replied_message(&self) {
+        let imp = self.imp();
+
+        let message_id = imp.reply_to_message_id.get();
+        if message_id == 0 {
+            return;
+        }
+
+        let Some(message) = self.message() else {
+            return;
+        };
+
+        let chat = message.chat_();
+        let reply_to_chat_id = imp.reply_to_chat_id.get();
+
+        // Jumping is only supported for replies within the same chat
+        if reply_to_chat_id != 0 && reply_to_chat_id != chat.id() {
+            return;
+        }
+
+        self.activate_action("chat-history.jump-to-message", Some(&message_id.to_variant()))
+            .unwrap();
     }
 
     fn update_from_message(&self, replied_message: &model::Message, is_outgoing: bool) {

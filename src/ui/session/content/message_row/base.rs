@@ -45,6 +45,9 @@ mod imp {
 
         fn show_message_menu(&self, x: i32, y: i32) {
             let obj = &*self.obj();
+            let row = utils::ancestor::<_, ui::MessageRow>(obj);
+            row.prepare_message_menu();
+
             let chat_history = utils::ancestor::<_, ui::ChatHistory>(obj);
             let menu = chat_history.message_menu();
 

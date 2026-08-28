@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::sync::OnceLock;
 
@@ -28,6 +29,9 @@ mod imp {
         pub(super) handler_id: RefCell<Option<glib::SignalHandlerId>>,
         pub(super) status_handler_id: RefCell<Option<glib::SignalHandlerId>>,
         pub(super) message: glib::WeakRef<model::Message>,
+        /// The file id of the photo that should be downloaded automatically
+        /// once the widget is shown, or 0 if there is none.
+        pub(super) pending_download_file_id: Cell<i32>,
         #[template_child]
         pub(super) message_bubble: TemplateChild<ui::MessageBubble>,
         #[template_child]
@@ -88,7 +92,19 @@ mod imp {
         }
     }
 
-    impl WidgetImpl for MessagePhoto {}
+    impl WidgetImpl for MessagePhoto {
+        fn map(&self) {
+            self.parent_map();
+
+            log::info!(
+                "[photo-debug] map: msg={:?} pending={}",
+                self.obj().message_id(),
+                self.pending_download_file_id.get()
+            );
+
+            self.obj().maybe_start_auto_download();
+        }
+    }
     impl ui::MessageBaseImpl for MessagePhoto {}
 }
 
@@ -194,56 +210,99 @@ impl MessagePhoto {
             imp.picture
                 .set_aspect_ratio(photo_size.width as f64 / photo_size.height as f64);
 
+            log::info!(
+                "[photo-debug] update_photo: msg={} file={} local_completed={} scale={}",
+                message.id(),
+                photo_size.photo.id,
+                photo_size.photo.local.is_downloading_completed,
+                self.scale_factor()
+            );
+
             if photo_size.photo.local.is_downloading_completed {
+                log::info!("[photo-debug] local completed, loading from disk");
+
                 imp.download_button.set_visible(false);
                 self.disconnect_click_handler();
 
                 self.load_photo(photo_size.photo.local.path);
             } else {
-                let file = &photo_size.photo;
-                let size = file.size.max(file.expected_size) as u64;
+                let file_id = photo_size.photo.id;
+                let size = photo_size.photo.size.max(photo_size.photo.expected_size) as u64;
                 let session = message.chat_().session_();
+
+                // Show a low-resolution preview of the photo while it is not
+                // downloaded.
+                imp.picture.set_paintable(
+                    data.photo
+                        .minithumbnail
+                        .and_then(|m| {
+                            gdk::Texture::from_bytes(&glib::Bytes::from_owned(
+                                glib::base64_decode(&m.data),
+                            ))
+                            .ok()
+                        })
+                        .as_ref(),
+                );
 
                 if session
                     .media_manager()
                     .should_auto_download(MediaType::Photo, size)
                 {
+                    log::info!("[photo-debug] auto allowed, pending={file_id}");
+
                     imp.download_button.set_visible(false);
                     self.disconnect_click_handler();
 
-                    let file_id = file.id;
-                    utils::spawn(clone!(
-                        #[weak(rename_to = obj)]
-                        self,
-                        #[weak]
-                        session,
-                        async move {
-                            obj.download_photo(file_id, &session).await;
-                        }
-                    ));
-                } else {
-                    // Show a low-resolution preview of the photo while it is not
+                    // The download is started when the widget is shown, so
+                    // that photos that are only scrolled past are not
                     // downloaded.
-                    imp.picture.set_paintable(
-                        data.photo
-                            .minithumbnail
-                            .and_then(|m| {
-                                gdk::Texture::from_bytes(&glib::Bytes::from_owned(
-                                    glib::base64_decode(&m.data),
-                                ))
-                                .ok()
-                            })
-                            .as_ref(),
-                    );
+                    imp.pending_download_file_id.set(file_id);
+                    self.maybe_start_auto_download();
+                } else {
+                    log::info!("[photo-debug] auto NOT allowed, showing download button");
 
                     imp.download_button.set_status(FileStatus::CanBeDownloaded);
                     imp.download_button.set_visible(true);
 
-                    let file_id = file.id;
                     self.connect_start_download(file_id, &session);
                 }
             }
         }
+    }
+
+    /// Starts the auto-download of the pending photo, if the widget is shown.
+    fn maybe_start_auto_download(&self) {
+        let imp = self.imp();
+
+        log::info!(
+            "[photo-debug] maybe_start: mapped={} pending={}",
+            self.is_mapped(),
+            imp.pending_download_file_id.get()
+        );
+
+        if !self.is_mapped() || imp.pending_download_file_id.get() == 0 {
+            return;
+        }
+
+        let file_id = imp.pending_download_file_id.take();
+
+        let Some(message) = imp.message.upgrade() else {
+            log::info!("[photo-debug] message gone, download of file {file_id} dropped");
+            return;
+        };
+        let session = message.chat_().session_();
+
+        log::info!("[photo-debug] starting download file={file_id}");
+
+        utils::spawn(clone!(
+            #[weak(rename_to = obj)]
+            self,
+            #[weak]
+            session,
+            async move {
+                obj.download_photo(file_id, &session).await;
+            }
+        ));
     }
 
     /// Clicking the media preview starts the download.
@@ -306,22 +365,30 @@ impl MessagePhoto {
     async fn download_photo(&self, file_id: i32, session: &model::ClientStateSession) {
         match session.download_file(file_id).await {
             Ok(file) => {
+                log::info!(
+                    "[photo-debug] download done: file={} completed={}",
+                    file_id,
+                    file.local.is_downloading_completed
+                );
+
                 // The download may have been canceled by the user, in which
                 // case the returned file is not usable.
                 if file.local.is_downloading_completed {
                     self.load_photo(file.local.path);
                 } else {
-                    log::info!("Photo download was canceled");
+                    log::info!("[photo-debug] Photo download was canceled (file {file_id})");
                 }
             }
             Err(e) => {
-                log::warn!("Failed to download a photo: {e:?}");
+                log::warn!("[photo-debug] Failed to download a photo (file {file_id}): {e:?}");
             }
         }
     }
 
     fn load_photo(&self, path: String) {
         if let Some(message_id) = self.message_id() {
+            log::info!("[photo-debug] load_photo: msg={message_id}");
+
             utils::spawn(clone!(
                 #[weak(rename_to = obj)]
                 self,
@@ -338,6 +405,7 @@ impl MessagePhoto {
                     if obj.message_id().filter(|id| *id == message_id).is_some() {
                         match result {
                             Ok(texture) => {
+                                log::info!("[photo-debug] paintable set (msg={message_id})");
                                 obj.imp().picture.set_paintable(Some(&texture));
                                 obj.imp().download_button.set_visible(false);
                                 obj.disconnect_click_handler();
@@ -346,6 +414,11 @@ impl MessagePhoto {
                                 log::warn!("Error decoding a photo: {e:?}");
                             }
                         }
+                    } else {
+                        log::info!(
+                            "[photo-debug] guard FAILED: captured={message_id} current={:?}",
+                            obj.message_id()
+                        );
                     }
                 }
             ));

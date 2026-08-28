@@ -58,6 +58,10 @@ mod imp {
         pub(super) message: RefCell<Option<glib::Object>>,
         pub(super) content: RefCell<Option<gtk::Widget>>,
         pub(super) avatar: RefCell<Option<ui::Avatar>>,
+        /// The signal handler ids of the `can_be_*` properties of the current
+        /// message, which are used to update the actions when the properties
+        /// are fetched lazily.
+        pub(super) properties_handler_ids: RefCell<Vec<glib::SignalHandlerId>>,
     }
 
     #[glib::object_subclass]
@@ -285,9 +289,40 @@ impl Row {
 
         self.update_content(message.clone());
 
-        imp.message.replace(Some(message));
+        // Disconnect the properties handlers of the previous message
+        let previous = imp.message.replace(Some(message));
+        if let Some(previous) = previous {
+            for handler_id in imp.properties_handler_ids.borrow_mut().drain(..) {
+                previous.disconnect(handler_id);
+            }
+        } else {
+            debug_assert!(imp.properties_handler_ids.borrow().is_empty());
+        }
 
-        // TODO: Update actions when needed (e.g. chat permissions change)
+        // The `can_be_*` properties of a message are fetched lazily, when its
+        // context menu is opened. Update the actions whenever they change.
+        if let Some(message) = self.message().downcast_ref::<model::Message>() {
+            let obj_weak = self.downgrade();
+
+            for pspec_name in [
+                "can-be-edited",
+                "can-be-deleted-only-for-self",
+                "can-be-deleted-for-all-users",
+            ] {
+                let obj_weak = obj_weak.clone();
+
+                let handler_id = message.connect_notify_local(
+                    Some(pspec_name),
+                    move |_, _| {
+                        if let Some(obj) = obj_weak.upgrade() {
+                            obj.update_actions();
+                        }
+                    },
+                );
+                imp.properties_handler_ids.borrow_mut().push(handler_id);
+            }
+        }
+
         self.update_actions();
 
         self.notify("message");
@@ -314,6 +349,16 @@ impl Row {
                 && can_send_messages_in_chat(&message.chat_())
         } else {
             false
+        }
+    }
+
+    /// Prepares the context menu of this message.
+    ///
+    /// The `can_be_*` properties of a message are only fetched when its
+    /// context menu is opened, instead of for every message in the history.
+    fn prepare_message_menu(&self) {
+        if let Some(message) = self.message().downcast_ref::<model::Message>() {
+            message.fetch_properties();
         }
     }
 
