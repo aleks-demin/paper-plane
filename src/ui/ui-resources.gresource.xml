@@ -37,8 +37,10 @@
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/indicators.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/label.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/location.ui</file>
+    <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/media_album.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/media_download_button.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/media_picture.ui</file>
+    <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/media_thumbnail.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/mod.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/photo.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/reply.ui</file>

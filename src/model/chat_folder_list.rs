@@ -216,32 +216,40 @@ impl ChatFolderList {
         if let tdlib::enums::Update::ChatFolders(update) = update {
             let imp = self.imp();
 
-            let mut order = self.imp().list.borrow_mut();
+            let removed_positions: Vec<usize> = {
+                let mut order = self.imp().list.borrow_mut();
 
-            let mut removed_positions = Vec::new();
-            order
-                .iter()
-                .map(|chat_list| chat_list.list_type().chat_folder_id().unwrap())
-                .collect::<Vec<_>>()
-                .iter()
-                .enumerate()
-                .for_each(|(position, old_id)| {
-                    if !update
-                        .chat_folders
-                        .iter()
-                        .map(|info| info.id)
-                        .any(|new_id| &new_id == old_id)
-                    {
-                        order.remove(position);
-                        removed_positions.push(position);
-                    }
+                let removed_positions: Vec<usize> = order
+                    .iter()
+                    .map(|chat_list| chat_list.list_type().chat_folder_id().unwrap())
+                    .enumerate()
+                    .filter(|(_, old_id)| {
+                        !update
+                            .chat_folders
+                            .iter()
+                            .map(|info| info.id)
+                            .any(|new_id| new_id == *old_id)
+                    })
+                    .map(|(position, _)| position)
+                    .collect();
+
+                // Remove from the highest position first, so that the
+                // positions of the remaining removals are not shifted.
+                for &position in removed_positions.iter().rev() {
+                    order.remove(position);
+                }
+
+                removed_positions
+            };
+
+            // Emit in descending order so that the positions stay valid
+            // after each emission.
+            removed_positions
+                .into_iter()
+                .rev()
+                .for_each(|position| {
+                    self.delegate_items_changed(position as u32, 1, 0);
                 });
-
-            drop(order);
-
-            removed_positions.into_iter().for_each(|position| {
-                self.delegate_items_changed(position as u32, 1, 0);
-            });
 
             update
                 .chat_folders

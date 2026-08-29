@@ -228,14 +228,18 @@ impl Selection {
             && (old_position != gtk::INVALID_LIST_POSITION
                 || position != gtk::INVALID_LIST_POSITION)
         {
-            if old_position == gtk::INVALID_LIST_POSITION {
+            let n_items = self.n_items();
+
+            if n_items == 0 {
+                // Nothing to report a selection change for.
+            } else if old_position == gtk::INVALID_LIST_POSITION {
                 self.selection_changed(position, 1);
             } else if position == gtk::INVALID_LIST_POSITION {
-                self.selection_changed(old_position.min(self.n_items() - 1), 1);
+                self.selection_changed(old_position.min(n_items - 1), 1);
             } else if position < old_position {
                 self.selection_changed(
                     position,
-                    (old_position - position + 1).min(self.n_items() - position),
+                    (old_position - position + 1).min(n_items - position),
                 );
             } else {
                 self.selection_changed(old_position, position - old_position + 1);

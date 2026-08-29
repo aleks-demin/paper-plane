@@ -3,7 +3,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::CompositeTemplate;
 
-use super::document::FileStatus;
+use super::file_status::FileStatus;
 
 mod imp {
     use super::*;
@@ -45,6 +45,12 @@ mod imp {
 glib::wrapper! {
     pub(crate) struct MediaDownloadButton(ObjectSubclass<imp::MediaDownloadButton>)
         @extends gtk::Widget;
+}
+
+impl Default for MediaDownloadButton {
+    fn default() -> Self {
+        glib::Object::new()
+    }
 }
 
 impl MediaDownloadButton {

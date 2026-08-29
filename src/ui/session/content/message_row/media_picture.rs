@@ -133,6 +133,12 @@ glib::wrapper! {
         @extends gtk::Widget;
 }
 
+impl Default for MediaPicture {
+    fn default() -> Self {
+        glib::Object::new()
+    }
+}
+
 impl MediaPicture {
     pub(crate) fn paintable(&self) -> Option<gdk::Paintable> {
         self.imp().picture.paintable()

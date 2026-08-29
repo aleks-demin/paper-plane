@@ -6,36 +6,6 @@ template $PaplMessageVideo : $PaplMessageBase {
   $PaplMessageBubble message_bubble {
     styles ["media"]
 
-    prefix: Overlay {
-      GestureClick click {
-        button: 1;
-      }
-
-      $PaplMessageMediaPicture picture {
-      }
-
-      [overlay]
-      Label indicator {
-        halign: start;
-        valign: start;
-
-        styles ["osd-indicator"]
-      }
-
-      [overlay]
-      Image play_icon {
-        visible: false;
-        halign: center;
-        valign: center;
-
-        styles ["play-overlay"]
-      }
-
-      [overlay]
-      $PaplMediaDownloadButton download_button {
-        halign: center;
-        valign: center;
-      }
-    };
+    prefix: $PaplMediaVideoTile video_tile {};
   }
 }

@@ -82,6 +82,19 @@ mod imp {
         pub(super) content: RefCell<model::BoxedMessageContent>,
         #[property(get)]
         pub(super) is_edited: Cell<bool>,
+        /// The id of the media album this message belongs to, or 0 if it
+        /// doesn't belong to one.
+        #[property(get, set, construct_only)]
+        pub(super) media_album_id: OnceCell<i64>,
+        /// The media album displayed by the row of this message.
+        ///
+        /// This is only set on the *representative* of a media album, which
+        /// is the message displayed in the chat history on behalf of all the
+        /// messages of the album. It is a weak reference because the album
+        /// owns its messages, so holding a strong reference from a member to
+        /// the album would create a cycle.
+        #[property(get)]
+        pub(super) album: glib::WeakRef<model::MediaAlbum>,
         pub(super) properties_fetched: Cell<bool>,
     }
 
@@ -141,9 +154,16 @@ impl Message {
                 "reply-to",
                 td_message.reply_to.map(model::BoxedMessageReplyTo),
             )
+            .property("media-album-id", td_message.media_album_id)
             .build();
 
         let imp = obj.imp();
+
+        log::debug!(
+            "Message::new: message id={:?} content={:?}",
+            td_message.id,
+            td_message.content,
+        );
 
         imp.content
             .replace(model::BoxedMessageContent(td_message.content));
@@ -154,6 +174,18 @@ impl Message {
 
     pub(crate) fn chat_(&self) -> model::Chat {
         self.chat().unwrap()
+    }
+
+    /// The media album this message represents in the chat history, if any.
+    pub(crate) fn media_album(&self) -> Option<model::MediaAlbum> {
+        self.imp().album.upgrade()
+    }
+
+    /// Sets this message as the representative of the given media album, or
+    /// clears the representative role with `None`.
+    pub(crate) fn set_media_album(&self, album: Option<&model::MediaAlbum>) {
+        self.imp().album.set(album);
+        self.notify("album");
     }
 
     /// Fetches the message properties (`can_be_edited`, `can_be_deleted_*`)
@@ -224,6 +256,12 @@ impl Message {
         if self.content() == content {
             return;
         }
+        log::debug!(
+            "Message::set_content: message id={:?} old={:?} new={:?}",
+            self.id(),
+            self.content(),
+            content,
+        );
         self.imp().content.replace(content);
         self.notify_content();
     }

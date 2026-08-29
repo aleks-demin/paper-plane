@@ -77,15 +77,6 @@ impl MediaManager {
         }
     }
 
-    /// Returns whether videos should be played automatically as soon as they
-    /// become visible.
-    ///
-    /// This does not affect animations (GIFs), which are always played
-    /// automatically when they are visible.
-    pub(crate) fn should_autoplay_videos(&self) -> bool {
-        self.settings.boolean("autoplay-videos")
-    }
-
     /// Downloads the file of the given `id`, calling `f` every time there's an
     /// update about the progress or when the download has completed.
     ///

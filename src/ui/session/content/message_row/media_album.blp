@@ -1,0 +1,15 @@
+using Gtk 4.0;
+
+template $PaplMessageMediaAlbum : $PaplMessageBase {
+  layout-manager: BinLayout {};
+
+  $PaplMessageBubble message_bubble {
+    styles ["media"]
+
+    prefix: Grid grid {
+      row-spacing: 2;
+      column-spacing: 2;
+      column-homogeneous: true;
+    };
+  }
+}

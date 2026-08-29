@@ -6,7 +6,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::CompositeTemplate;
 
-use super::file_status::FileStatus;
+use super::FileStatus;
 
 mod imp {
     use super::*;

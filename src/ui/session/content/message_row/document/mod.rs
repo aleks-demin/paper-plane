@@ -1,11 +1,10 @@
-mod file_status;
 mod status_indicator;
 
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::sync::OnceLock;
 
-pub(crate) use self::file_status::FileStatus;
+pub(crate) use super::file_status::FileStatus;
 use glib::clone;
 use gtk::gdk;
 use gtk::gio;
@@ -29,11 +28,13 @@ mod imp {
     pub(crate) struct MessageDocument {
         pub(super) bindings: RefCell<Vec<gtk::ExpressionWatch>>,
         pub(super) handler_id: RefCell<Option<glib::SignalHandlerId>>,
-        pub(super) status_handler_id: RefCell<Option<glib::SignalHandlerId>>,
+        pub(super) click_handler_id: RefCell<Option<glib::SignalHandlerId>>,
+        pub(super) loader_handler_id: RefCell<Option<glib::SignalHandlerId>>,
         pub(super) message: glib::WeakRef<model::Message>,
         /// The file id of the thumbnail that should be downloaded once the
         /// widget is shown, or 0 if there is none.
         pub(super) pending_thumbnail_file_id: Cell<i32>,
+        pub(super) loader: super::super::MediaLoader,
         #[template_child]
         pub(super) message_bubble: TemplateChild<ui::MessageBubble>,
         #[template_child]
@@ -88,6 +89,25 @@ mod imp {
             match pspec.name() {
                 "message" => self.message.upgrade().to_value(),
                 _ => unimplemented!(),
+            }
+        }
+
+        fn constructed(&self) {
+            self.parent_constructed();
+
+            let handler_id = self.loader.connect_status_notify(clone!(
+                #[weak(rename_to = obj)]
+                self.obj(),
+                move |_| {
+                    obj.update_status_ui();
+                }
+            ));
+            *self.loader_handler_id.borrow_mut() = Some(handler_id);
+        }
+
+        fn dispose(&self) {
+            if let Some(handler_id) = self.loader_handler_id.borrow_mut().take() {
+                self.loader.disconnect(handler_id);
             }
         }
     }
@@ -160,6 +180,8 @@ impl MessageDocument {
         utils::spawn(clone!(
             #[weak(rename_to = obj)]
             self,
+            #[weak]
+            session,
             async move {
                 if let Ok(file) = session.download_file(file_id).await {
                     obj.imp()
@@ -179,131 +201,101 @@ impl MessageDocument {
 
             imp.file_name_label.set_label(&data.document.file_name);
 
-            let session = message.chat_().session_();
-
             self.try_load_thumbnail(message);
-            self.update_status(data.document.document, session);
+
+            imp.loader.bind(
+                &message.chat_().session_(),
+                MediaType::File,
+                &data.document.document,
+            );
+
+            // In contrast to photos and videos, documents are downloaded as
+            // soon as they are shown in the history, even if the widget is
+            // not mapped yet.
+            imp.loader.maybe_start_auto_download();
+
+            self.update_status_ui();
         }
     }
 
-    fn update_status(
-        &self,
-        file: tdlib::types::File,
-        session: model::ClientStateSession,
-    ) -> FileStatus {
-        let status = FileStatus::from(&file);
-
-        let size = file.size.max(file.expected_size) as u64;
-
-        self.update_size_label(status, size);
-        self.update_button(file, session, status);
-
-        status
-    }
-
-    fn update_button(
-        &self,
-        file: tdlib::types::File,
-        session: model::ClientStateSession,
-        status: FileStatus,
-    ) {
+    /// Replaces the click gesture handler of the file box.
+    fn replace_click_handler<F: Fn(&gtk::GestureClick, i32, f64, f64) + 'static>(&self, f: F) {
         let imp = self.imp();
         let click = &*imp.click;
-        let file_id = file.id;
+
+        let handler_id = click.connect_released(f);
+
+        if let Some(handler_id) = imp.click_handler_id.borrow_mut().replace(handler_id) {
+            click.disconnect(handler_id);
+        }
+    }
+
+    fn disconnect_click_handler(&self) {
+        let imp = self.imp();
+
+        if let Some(handler_id) = imp.click_handler_id.borrow_mut().take() {
+            imp.click.disconnect(handler_id);
+        }
+    }
+
+    /// Updates the widgets according to the status of the loader.
+    fn update_status_ui(&self) {
+        let imp = self.imp();
+        let status = imp.loader.status();
 
         imp.status_indicator.set_status(status);
-        let handler_id = match status {
-            FileStatus::Downloading(_) | FileStatus::Uploading(_) => {
-                return;
-            }
-            FileStatus::CanBeDownloaded => {
-                let size = file.size.max(file.expected_size) as u64;
+        self.update_size_label(status, imp.loader.size());
 
-                // Download the file automatically if the settings allow it.
-                if session
-                    .media_manager()
-                    .should_auto_download(MediaType::File, size)
-                {
-                    session.download_file_with_updates(
-                        file_id,
-                        clone!(
-                            #[weak(rename_to = obj)]
-                            self,
-                            #[weak]
-                            session,
-                            move |file| {
-                                obj.update_status(file, session);
-                            }
-                        ),
-                    );
-
-                    imp.status_indicator
-                        .set_status(FileStatus::Downloading(0.0));
-
-                    // Ignore clicks while the file is downloading automatically.
-                    click.connect_released(|_, _, _, _| {})
+        match status {
+            FileStatus::Downloading(_) => {
+                if imp.loader.is_auto() {
+                    // Ignore clicks while the file is downloading
+                    // automatically.
+                    self.disconnect_click_handler();
                 } else {
-                    // Download file
-                    click.connect_released(clone!(
+                    // Clicking again cancels the download.
+                    self.replace_click_handler(clone!(
                         #[weak(rename_to = obj)]
                         self,
-                        #[weak]
-                        session,
-                        move |click, _, _, _| {
-                            // TODO: Fix bug mentioned here
-                            // https://github.com/paper-plane-developers/paper-plane/pull/372#discussion_r968841370
-                            session.download_file_with_updates(
-                                file_id,
-                                clone!(
-                                    #[weak]
-                                    obj,
-                                    #[weak]
-                                    session,
-                                    move |file| {
-                                        obj.update_status(file, session);
-                                    }
-                                ),
-                            );
-
-                            let imp = obj.imp();
-
-                            imp.status_indicator
-                                .set_status(FileStatus::Downloading(0.0));
-                            let handler_id = click.connect_released(clone!(
-                                #[weak]
-                                session,
-                                move |_, _, _, _| {
-                                    session.cancel_download_file(file_id);
-                                }
-                            ));
-                            if let Some(handler_id) =
-                                imp.status_handler_id.replace(Some(handler_id))
-                            {
-                                click.disconnect(handler_id);
-                            }
+                        move |_, _, _, _| {
+                            obj.imp().loader.cancel_download();
                         }
-                    ))
+                    ));
                 }
+            }
+            // Uploads are driven by the sender side, so there is nothing to
+            // react to.
+            FileStatus::Uploading(_) => self.disconnect_click_handler(),
+            FileStatus::CanBeDownloaded => {
+                self.replace_click_handler(clone!(
+                    #[weak(rename_to = obj)]
+                    self,
+                    move |_, _, _, _| {
+                        obj.imp().loader.request_download();
+                    }
+                ));
             }
             FileStatus::Downloaded => {
                 // Open file
                 if imp.file_thumbnail_picture.file().is_some() {
                     imp.status_indicator.set_visible(false);
                 }
-                let gio_file = gio::File::for_path(&file.local.path);
-                click.connect_released(move |_, _, _, _| {
+
+                let Some(path) = imp.loader.path() else {
+                    self.disconnect_click_handler();
+                    return;
+                };
+
+                let gio_file = gio::File::for_path(path.as_str());
+                self.replace_click_handler(move |_, _, _, _| {
                     if let Err(err) = gio::AppInfo::launch_default_for_uri(
                         &gio_file.uri(),
                         gio::AppLaunchContext::NONE,
                     ) {
                         log::error!("Error: {}", err);
                     }
-                })
+                });
             }
-        };
-
-        if let Some(handler_id) = imp.status_handler_id.replace(Some(handler_id)) {
-            click.disconnect(handler_id);
         }
     }
 

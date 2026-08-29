@@ -1,10 +1,13 @@
+use gtk::glib;
 use tdlib::types::File;
 use FileStatus::*;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, glib::Boxed)]
+#[boxed_type(name = "FileStatus")]
 pub(crate) enum FileStatus {
     Downloading(f64),
     Uploading(f64),
+    #[default]
     CanBeDownloaded,
     Downloaded,
 }

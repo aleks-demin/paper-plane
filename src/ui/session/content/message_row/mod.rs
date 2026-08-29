@@ -1,11 +1,17 @@
 mod base;
 mod bubble;
 mod document;
+mod file_status;
 mod indicators;
 mod label;
 mod location;
+mod media_album;
 mod media_download_button;
+mod media_loader;
+mod media_photo_tile;
 mod media_picture;
+mod media_thumbnail;
+mod media_video_tile;
 mod photo;
 mod reply;
 mod sticker;
@@ -30,11 +36,17 @@ pub(crate) use self::base::MessageBaseImpl;
 pub(crate) use self::bubble::MessageBubble;
 pub(crate) use self::document::MessageDocument;
 pub(crate) use self::document::StatusIndicator as MessageDocumentStatusIndicator;
+pub(crate) use self::file_status::FileStatus;
 pub(crate) use self::indicators::MessageIndicators;
 pub(crate) use self::label::MessageLabel;
 pub(crate) use self::location::MessageLocation;
+pub(crate) use self::media_album::MessageMediaAlbum;
 pub(crate) use self::media_download_button::MediaDownloadButton;
+pub(crate) use self::media_loader::MediaLoader;
+pub(crate) use self::media_photo_tile::MediaPhotoTile;
 pub(crate) use self::media_picture::MediaPicture;
+pub(crate) use self::media_thumbnail::MediaThumbnail;
+pub(crate) use self::media_video_tile::MediaVideoTile;
 pub(crate) use self::photo::MessagePhoto;
 pub(crate) use self::reply::MessageReply;
 pub(crate) use self::sticker::MessageSticker;
@@ -221,6 +233,10 @@ impl Row {
         let imp = self.imp();
 
         if imp.message.borrow().as_ref() == Some(&message) {
+            // The message is unchanged, but the way it is displayed may have
+            // changed, e.g. when it became the representative of a media
+            // album with a second member.
+            self.update_content(message);
             return;
         }
 
@@ -388,35 +404,41 @@ impl Row {
                 _ => message_.is_outgoing(),
             };
 
-            match message_.content().0 {
-                MessageAnimation(_) | MessageVideo(_) => {
-                    self.update_specific_content::<_, ui::MessageVideo>(message_);
-                }
-                MessageAnimatedEmoji(data)
-                    if data.animated_emoji.sticker.clone().map(
-                        |s| matches!(s.format, tdlib::enums::StickerFormat::Webp | tdlib::enums::StickerFormat::Tgs)
-                    ).unwrap_or_default() => {
-                    self.update_specific_content::<_, ui::MessageSticker>(message_);
-                }
-                MessageLocation(_) => {
-                    self.update_specific_content::<_, ui::MessageLocation>(message_);
-                }
-                MessagePhoto(_) => {
-                    self.update_specific_content::<_, ui::MessagePhoto>(message_);
-                }
-                MessageSticker(data)
-                    if matches!(data.sticker.format, tdlib::enums::StickerFormat::Webp | tdlib::enums::StickerFormat::Tgs) =>
-                {
-                    self.update_specific_content::<_, ui::MessageSticker>(message_);
-                }
-                MessageDocument(_) => {
-                    self.update_specific_content::<_, ui::MessageDocument>(message_);
-                }
-                MessageVenue(_) => {
-                    self.update_specific_content::<_, ui::MessageVenue>(message_);
-                }
-                _ => {
-                    self.update_specific_content::<_, ui::MessageText>(&message);
+            if message_.media_album().is_some_and(|album| album.len() >= 2) {
+                // The message represents a media album, which is displayed as
+                // a grid of tiles instead of as its individual content.
+                self.update_specific_content::<_, ui::MessageMediaAlbum>(message_);
+            } else {
+                match message_.content().0 {
+                    MessageAnimation(_) | MessageVideo(_) => {
+                        self.update_specific_content::<_, ui::MessageVideo>(message_);
+                    }
+                    MessageAnimatedEmoji(data)
+                        if data.animated_emoji.sticker.clone().map(
+                            |s| matches!(s.format, tdlib::enums::StickerFormat::Webp | tdlib::enums::StickerFormat::Tgs)
+                        ).unwrap_or_default() => {
+                        self.update_specific_content::<_, ui::MessageSticker>(message_);
+                    }
+                    MessageLocation(_) => {
+                        self.update_specific_content::<_, ui::MessageLocation>(message_);
+                    }
+                    MessagePhoto(_) => {
+                        self.update_specific_content::<_, ui::MessagePhoto>(message_);
+                    }
+                    MessageSticker(data)
+                        if matches!(data.sticker.format, tdlib::enums::StickerFormat::Webp | tdlib::enums::StickerFormat::Tgs) =>
+                    {
+                        self.update_specific_content::<_, ui::MessageSticker>(message_);
+                    }
+                    MessageDocument(_) => {
+                        self.update_specific_content::<_, ui::MessageDocument>(message_);
+                    }
+                    MessageVenue(_) => {
+                        self.update_specific_content::<_, ui::MessageVenue>(message_);
+                    }
+                    _ => {
+                        self.update_specific_content::<_, ui::MessageText>(&message);
+                    }
                 }
             }
 
@@ -449,6 +471,10 @@ impl Row {
                 if let Some(old_content) = &*content_ref {
                     old_content.unparent();
                 }
+                log::debug!(
+                    "Row::update_specific_content: creating {}",
+                    std::any::type_name::<B>(),
+                );
 
                 let content = B::new(message);
                 content.set_hexpand(true);

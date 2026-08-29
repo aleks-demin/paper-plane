@@ -6,19 +6,6 @@ template $PaplMessagePhoto : $PaplMessageBase {
   $PaplMessageBubble message_bubble {
     styles ["media"]
 
-    prefix: Overlay {
-      GestureClick click {
-        button: 1;
-      }
-
-      $PaplMessageMediaPicture picture {
-      }
-
-      [overlay]
-      $PaplMediaDownloadButton download_button {
-        halign: center;
-        valign: center;
-      }
-    };
+    prefix: $PaplMediaPhotoTile photo_tile {};
   }
 }

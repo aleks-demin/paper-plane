@@ -76,7 +76,16 @@ mod imp {
             if let Some(item) = &*self.item.borrow() {
                 if let Some(item) = item.downcast_ref::<model::ChatHistoryItem>() {
                     if let model::ChatHistoryItemType::Message(message) = item.type_() {
-                        op(&chat_history, message.id());
+                        // A media album is displayed by one row on behalf of
+                        // all of its messages, which must all be marked as
+                        // viewed.
+                        if let Some(album) = message.media_album() {
+                            for member in album.messages() {
+                                op(&chat_history, member.id());
+                            }
+                        } else {
+                            op(&chat_history, message.id());
+                        }
                     }
                 } else if let Some(message) = item.downcast_ref::<model::SponsoredMessage>() {
                     op(&chat_history, message.message_id());

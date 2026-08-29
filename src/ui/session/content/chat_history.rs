@@ -190,8 +190,28 @@ mod imp {
                         // The view is pinned to the newest message, so the
                         // oldest items of the list are far away from the
                         // viewport and can be trimmed.
+                        //
+                        // The value-changed handler can also be called during
+                        // size allocation, and mutating the model (and thus
+                        // emitting `items-changed`) while the list view is
+                        // allocating corrupts its internal state. Defer the
+                        // mutation to the next main-loop iteration.
                         if obj.sticky() {
-                            model.trim_back();
+                            glib::idle_add_local_once(clone!(
+                                #[weak]
+                                obj,
+                                #[weak]
+                                model,
+                                move || {
+                                    if obj.imp().is_loading_messages.get() {
+                                        return;
+                                    }
+
+                                    if obj.sticky() {
+                                        model.trim_back();
+                                    }
+                                }
+                            ));
                         }
 
                         imp.is_loading_messages.set(true);
