@@ -7,6 +7,13 @@ edition = "2021"
 [package.metadata.system-deps]
 tdjson = "1.8.61"
 
+[features]
+default = ["download-tdlib"]
+# Fetch a prebuilt TDLib binary at build time (requires network).
+download-tdlib = ["tdlib/download-tdlib"]
+# Locate TDLib through pkg-config (offline, requires a system-installed TDLib).
+pkg-config = ["tdlib/pkg-config"]
+
 [dependencies]
 adw = { version = "0.7", package = "libadwaita", features = ["v1_6"] }
 anyhow = "1"
@@ -26,12 +33,12 @@ qrcode-generator = { version = "5", default-features = false }
 regex = "1"
 rlt = { git = "https://github.com/paper-plane-developers/gtk-rlottie-rs.git", tag = "v0.9.0", package = "gtk-rlottie" }
 shumate = { version = "0.6", package = "libshumate" }
-tdlib = { version = "1.4", package = "tdlib-rs", features = ["pkg-config"] }
+tdlib = { version = "1.4", package = "tdlib-rs", default-features = false }
 temp-dir = "0.1"
 thiserror = "2"
 
 [build-dependencies]
-tdlib = { version = "1.4", package = "tdlib-rs", features = ["pkg-config"] }
+tdlib = { version = "1.4", package = "tdlib-rs", default-features = false }
 
 [profile.release]
 lto = true

@@ -182,6 +182,13 @@ mod imp {
                     let near_newest = adj.upper() > adj.page_size() * 2.0
                         && adj.value() + adj.page_size() * 2.0 >= adj.upper();
 
+                    log::debug!(
+                        "Scrolled (near_oldest = {near_oldest}, near_newest = {near_newest}, adj.value = {}, adj.upper = {}, adj.page_size = {})",
+                        adj.value(),
+                        adj.upper(),
+                        adj.page_size(),
+                    );
+
                     if !near_oldest && !near_newest {
                         return;
                     }
@@ -197,6 +204,7 @@ mod imp {
                         // allocating corrupts its internal state. Defer the
                         // mutation to the next main-loop iteration.
                         if obj.sticky() {
+                            log::debug!("Trimming back chat history after scroll");
                             glib::idle_add_local_once(clone!(
                                 #[weak]
                                 obj,
@@ -225,11 +233,16 @@ mod imp {
                                 obj.imp().is_loading_messages.set(false);
 
                                 let result = if near_oldest {
+                                    log::debug!("Loading older messages on scroll (limit = 30)");
                                     model.load_older_messages(30).await
                                 } else {
+                                    log::debug!("Loading newer messages on scroll (limit = 50)");
                                     model.load_newer_messages(50).await
                                 };
 
+                                if let Err(model::ChatHistoryError::AlreadyLoading) = result {
+                                    log::debug!("Scroll-triggered load already in flight");
+                                }
                                 if let Err(model::ChatHistoryError::Tdlib(e)) = result {
                                     log::warn!("Couldn't load more chat messages: {:?}", e);
                                 }
@@ -430,6 +443,16 @@ impl ChatHistory {
         }
 
         if let Some(chat) = chat {
+            log::debug!(
+                "Opening chat {} (unread_count = {}, anchor = {})",
+                chat.id(),
+                chat.unread_count(),
+                if chat.unread_count() > 0 {
+                    chat.last_read_inbox_message_id()
+                } else {
+                    0
+                },
+            );
             self.action_set_enabled(
                 "chat-history.leave-chat",
                 match chat.chat_type() {
@@ -579,6 +602,15 @@ impl ChatHistory {
             async move {
                 let imp = obj.imp();
 
+                log::debug!(
+                    "Filling chat history (at_newest = {}, is_unread_anchor = {})",
+                    model_weak.upgrade().map(|m| m.at_newest()).unwrap_or(false),
+                    model_weak
+                        .upgrade()
+                        .map(|m| m.is_unread_anchor())
+                        .unwrap_or(false),
+                );
+
                 let scrollbar = imp.scrolled_window.vscrollbar();
                 scrollbar.set_visible(false);
 
@@ -594,14 +626,28 @@ impl ChatHistory {
                             let mut limit = INITIAL_LOAD_LIMIT;
 
                             while adj.value() == 0.0 {
+                                let adj_value = adj.value();
+                                let adj_upper = adj.upper();
+                                let adj_page_size = adj.page_size();
                                 match model.load_older_messages(limit).await {
                                     Ok(true) => {
+                                        log::debug!(
+                                            "Loaded older messages (limit = {limit}, remaining = true, adj.value = {adj_value}, adj.upper = {adj_upper}, adj.page_size = {adj_page_size})"
+                                        );
                                         limit = (limit / 2).max(2);
                                     }
-                                    Ok(false) => break,
+                                    Ok(false) => {
+                                        log::debug!(
+                                            "No more older messages (limit = {limit}, adj.value = {adj_value}, adj.upper = {adj_upper}, adj.page_size = {adj_page_size})"
+                                        );
+                                        break;
+                                    }
                                     Err(model::ChatHistoryError::AlreadyLoading) => {
                                         // Another load is in flight. Try again
                                         // after giving it a chance to finish.
+                                        log::debug!(
+                                            "load_older_messages already in flight (limit = {limit}), retrying"
+                                        );
                                         glib::timeout_future(std::time::Duration::from_millis(
                                             20,
                                         ))
@@ -616,15 +662,32 @@ impl ChatHistory {
                                 }
                             }
 
+                            log::debug!(
+                                "Setting sticky (adj.value = {}, adj.upper = {}, adj.page_size = {}, n_items = {})",
+                                adj.value(),
+                                adj.upper(),
+                                adj.page_size(),
+                                model.n_items(),
+                            );
                             obj.set_sticky(true);
                         } else {
+                            log::debug!("Loading messages around the anchor");
                             obj.load_around_anchor(&model).await;
+
+                            log::debug!(
+                                "Anchor window loaded (n_items = {})",
+                                model.n_items(),
+                            );
 
                             obj.set_sticky(false);
                         }
                     }
                 }
 
+                log::debug!(
+                    "Chat history fill done (n_items = {}), showing scrollbar",
+                    model_weak.upgrade().map(|m| m.n_items()).unwrap_or(0),
+                );
                 scrollbar.set_visible(true);
 
                 imp.is_loading_messages.set(false);
@@ -764,6 +827,11 @@ impl ChatHistory {
             let client_id = chat.session_().client_().id();
             let viewed_message_ids =
                 Vec::from_iter(imp.viewed_message_ids.borrow().iter().copied());
+
+            log::debug!(
+                "Reporting {count} viewed messages to TDLib (chat_id = {chat_id})",
+                count = viewed_message_ids.len(),
+            );
 
             utils::spawn(async move {
                 tdlib::functions::view_messages(chat_id, viewed_message_ids, None, true, client_id)

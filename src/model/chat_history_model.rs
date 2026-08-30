@@ -138,6 +138,14 @@ impl ChatHistoryModel {
             0
         };
 
+        log::debug!(
+            "Creating chat history model for chat {} (unread_count = {}, anchor = {}, at_newest = {})",
+            chat.id(),
+            chat.unread_count(),
+            anchor,
+            anchor == 0,
+        );
+
         Self::with_anchor(chat, anchor, anchor != 0, anchor == 0)
     }
 
@@ -206,6 +214,10 @@ impl ChatHistoryModel {
             .map(|m| m.id())
             .unwrap_or(imp.anchor.get());
 
+        log::debug!(
+            "load_older_messages: from_message_id = {from_message_id}, limit = {limit}"
+        );
+
         imp.is_loading_older.set(true);
 
         let result = self
@@ -225,11 +237,14 @@ impl ChatHistoryModel {
             .collect();
 
         if messages.is_empty() {
+            log::debug!("load_older_messages: no messages returned");
             return Ok(false);
         }
 
+        let count = messages.len();
         self.append(messages);
         self.trim_front();
+        log::debug!("load_older_messages: appended {count} messages, more = true");
         Ok(true)
     }
 
@@ -242,6 +257,11 @@ impl ChatHistoryModel {
         }
 
         let anchor = imp.anchor.get();
+
+        log::debug!(
+            "load_around_anchor: anchor = {anchor}, newer_limit = {AROUND_NEWER_MESSAGES}, older_limit = {}",
+            AROUND_NEWER_MESSAGES * 2,
+        );
 
         imp.is_loading_older.set(true);
 
@@ -264,7 +284,9 @@ impl ChatHistoryModel {
             == messages.first().map(|m| m.id());
 
         if !messages.is_empty() {
+            let count = messages.len();
             self.append(messages);
+            log::debug!("load_around_anchor: appended {count} messages");
         }
 
         // Depending on the TDLib version, `getChatHistory` might not return the
@@ -282,6 +304,11 @@ impl ChatHistoryModel {
             imp.at_newest.set(true);
             self.flush_pending_new_messages();
         }
+
+        log::debug!(
+            "load_around_anchor: reached_newest = {reached_newest}, at_newest = {}",
+            imp.at_newest.get(),
+        );
 
         Ok(())
     }
@@ -318,6 +345,10 @@ impl ChatHistoryModel {
 
         let limit = limit.clamp(1, MAX_NEWER_MESSAGES);
 
+        log::debug!(
+            "load_newer_messages: newest_message_id = {newest_message_id}, limit = {limit}"
+        );
+
         imp.is_loading_newer.set(true);
 
         let result = self
@@ -337,8 +368,11 @@ impl ChatHistoryModel {
         if messages.is_empty() {
             imp.at_newest.set(true);
             self.flush_pending_new_messages();
+            log::debug!("load_newer_messages: no newer messages, at_newest = true");
             return Ok(false);
         }
+
+        let count = messages.len();
 
         let mut added = 0usize;
         let mut swaps: Vec<(model::Message, model::Message)> = Vec::new();
@@ -374,6 +408,7 @@ impl ChatHistoryModel {
         }
 
         self.trim_back();
+        log::debug!("load_newer_messages: prepended {count} messages, more = true");
         Ok(true)
     }
 
@@ -480,9 +515,9 @@ impl ChatHistoryModel {
         {
             let len = imp.list.borrow().len() as u32;
             debug_assert!(
-                position + added.max(removed) <= len,
-                "items_changed({position}, {removed}, {added}): position + max(removed, added) ({}) exceeds n_items ({len})",
-                position + added.max(removed)
+                position + added <= len,
+                "items_changed({position}, {removed}, {added}): position + added ({}) exceeds n_items ({len})",
+                position + added
             );
         }
 
@@ -852,6 +887,10 @@ impl ChatHistoryModel {
             // There might be messages between the newest loaded message and
             // this one that are not loaded yet. Keep the message pending
             // instead of creating a hole in the list.
+            log::debug!(
+                "New message {} queued as pending (not at newest yet)",
+                message.id(),
+            );
             self.imp()
                 .pending_new_messages
                 .borrow_mut()
@@ -859,8 +898,12 @@ impl ChatHistoryModel {
             return;
         }
 
-        self.push_front(message);
-    }
+        log::debug!(
+                "New message {} pushed to the front of the history",
+                message.id(),
+            );
+            self.push_front(message);
+        }
 
     fn handle_deleted_message(&self, message: model::Message) {
         self.imp()
@@ -936,6 +979,7 @@ impl ChatHistoryModel {
         let imp = self.imp();
 
         let pending: Vec<model::Message> = imp.pending_new_messages.borrow_mut().drain(..).collect();
+        log::debug!("Flushing {} pending new messages", pending.len());
 
         // The messages are ordered from the oldest to the newest. Prepend them
         // in order, so that the newest message ends up at the front of the list.

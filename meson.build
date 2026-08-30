@@ -15,7 +15,14 @@ dependency('gio-2.0', version: '>= 2.72')
 dependency('gtk4', version: '>= 4.12')
 dependency('libadwaita-1', version: '>= 1.4')
 dependency('shumate-1.0', version: '>= 1')
-dependency('tdjson', version: '== 1.8.61')
+
+# The tdlib-rs build script locates a system-installed TDLib via pkg-config at
+# cargo build time. That is only needed for the "pkg-config" backend; when using
+# "download-tdlib" (the default) the prebuilt binary is fetched by cargo and no
+# system TDLib is required, so the dependency is not probed here.
+if get_option('tdlib-backend') == 'pkg-config'
+  dependency('tdjson', version: '== 1.8.61')
+endif
 
 glib_compile_resources = find_program('glib-compile-resources', required: true)
 glib_compile_schemas = find_program('glib-compile-schemas', required: true)

@@ -22,3 +22,14 @@ option(
   value: '344583e45741c457fe1862106095a5eb',
   description: 'Hash of the Application identifier for accessing the Telegram API, which can be obtained at https://my.telegram.org.'
 )
+
+option(
+  'tdlib-backend',
+  type: 'combo',
+  choices: [
+    'download-tdlib',
+    'pkg-config'
+  ],
+  value: 'download-tdlib',
+  description: 'How TDLib is located at build time. "download-tdlib" fetches a prebuilt binary from GitHub (requires network); "pkg-config" uses a system-installed TDLib (offline).'
+)

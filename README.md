@@ -109,6 +109,16 @@ ninja -C _build
 sudo ninja -C _build install
 ```
 
+By default, the build fetches a prebuilt TDLib binary from GitHub (`-Dtdlib-backend=download-tdlib`), which requires network access. This is not suitable for reproducible or offline builds (e.g. Flatpak). To build against a system-installed TDLib instead, use:
+
+```shell
+meson . _build -Dtg_api_id=ID -Dtg_api_hash=HASH -Dtdlib-backend=pkg-config
+ninja -C _build
+sudo ninja -C _build install
+```
+
+The Flatpak build (`build-aux/app.drey.PaperPlane.Devel.json`) always uses `-Dtdlib-backend=pkg-config`, since TDLib is built from source as part of the Flatpak and the build must be offline.
+
 ## Contribution
 
 Any type of participation is encouraged. If you want to translate, you can refer to [our weblate project](https://hosted.weblate.org/engage/paper-plane). But also design and art contributions are welcome. For this [our design repository](https://github.com/paper-plane-developers/paper-plane-designs) is the first place to go.

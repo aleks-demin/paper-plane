@@ -124,6 +124,7 @@
             "run-tests": true,
             "config-opts": [
                 "-Dprofile=development",
+                "-Dtdlib-backend=pkg-config",
                 "--libdir=lib"
             ],
             "sources": [

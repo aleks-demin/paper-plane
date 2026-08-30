@@ -34,6 +34,15 @@ else
   message('Building in debug mode')
 endif
 
+# Select how TDLib is located at build time.
+# - "download-tdlib" (default): fetches a prebuilt TDLib binary from GitHub (needs network).
+# - "pkg-config": locates a system-installed TDLib via pkg-config (offline, used by Flatpak).
+if get_option('tdlib-backend') == 'pkg-config'
+  cargo_options += [ '--no-default-features', '--features', 'pkg-config' ]
+else
+  cargo_options += [ '--features', 'download-tdlib' ]
+endif
+
 cargo_env = [ 'CARGO_HOME=' + meson.project_build_root() / 'cargo-home' ]
 
 custom_target(
