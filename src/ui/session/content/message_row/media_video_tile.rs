@@ -10,10 +10,12 @@ use gtk::subclass::prelude::*;
 
 use crate::model;
 use crate::model::MediaType;
+use crate::ui::MediaViewer;
+use crate::ui::ViewerEntry;
+use crate::ui::ViewerItem;
 
 use super::FileStatus;
 
-const PLAY_ICON_NAME: &str = "media-playback-start-symbolic";
 const ANIMATION_INDICATOR_LABEL: &str = "GIF";
 
 mod imp {
@@ -25,7 +27,6 @@ mod imp {
         pub(super) overlay: gtk::Overlay,
         pub(super) picture: super::super::MediaPicture,
         pub(super) indicator: gtk::Label,
-        pub(super) play_icon: gtk::Image,
         pub(super) download_button: super::super::MediaDownloadButton,
         pub(super) click: gtk::GestureClick,
         pub(super) loader: super::super::MediaLoader,
@@ -33,19 +34,28 @@ mod imp {
         pub(super) is_animation: Cell<bool>,
         /// The duration of the video in seconds. Always zero for animations.
         pub(super) video_duration_secs: Cell<i64>,
-        /// Whether videos should start playing when they become visible on
-        /// screen, in addition to the session-wide autoplay setting.
-        /// Animations always do.
-        #[property(get, set = Self::set_autoplay_on_visibility, explicit_notify)]
-        pub(super) autoplay_on_visibility: Cell<bool>,
-        /// The loaded media stream, if any.
+        /// The most recent state of the media file of this tile, as
+        /// reported by the loader.
+        pub(super) file: RefCell<Option<tdlib::types::File>>,
+        /// The items of the media album this tile belongs to, together with
+        /// the index of this tile's item, used to open the media viewer on
+        /// the whole album.
+        ///
+        /// This is only set for the tiles of a media album; the tiles of
+        /// single media messages open the viewer on their own media only.
+        pub(super) viewer_context: RefCell<Option<(Vec<ViewerEntry>, usize)>>,
+        /// The message this tile displays.
+        ///
+        /// The media viewer needs it for browsing the media of the chat of
+        /// the message.
+        pub(super) message: glib::WeakRef<model::Message>,
+        /// The loaded media stream, if any. Only animations own a stream in
+        /// the chat; videos are played in the media viewer.
         pub(super) media: RefCell<Option<gtk::MediaFile>>,
         pub(super) prepared_handler_id: RefCell<Option<glib::SignalHandlerId>>,
-        /// Whether the playback was started at least once.
-        pub(super) started: Cell<bool>,
         /// Whether the playback should start as soon as the media stream is
-        /// ready, as a result of an explicit user action. Autoplay is
-        /// disabled, so this is the only way playback begins.
+        /// ready, as a result of an explicit user action. Only animations
+        /// use this: videos are opened in the media viewer.
         pub(super) pending_play: Cell<bool>,
         /// Whether the video file has been loaded into a media stream.
         /// This is set to true in [`Self::prepare_video`] and reset when
@@ -55,8 +65,6 @@ mod imp {
         /// The shared preview component rendering the minithumbnail or the
         /// high-resolution thumbnail.
         pub(super) thumbnail: super::super::MediaThumbnail,
-        /// Whether the playback reached the end of the video.
-        pub(super) ended: Cell<bool>,
         /// Whether the playback was paused with an explicit user action.
         ///
         /// A playback paused this way is never resumed automatically,
@@ -106,10 +114,6 @@ mod imp {
 
             obj.set_layout_manager(Some(gtk::BinLayout::new()));
 
-            // Videos are not played automatically, so that the video file is
-            // only decoded when the user explicitly clicks to play.
-            self.autoplay_on_visibility.set(false);
-
             self.picture.set_hexpand(true);
             self.picture.set_vexpand(true);
             self.overlay.set_child(Some(&self.picture));
@@ -122,12 +126,6 @@ mod imp {
             self.indicator.set_valign(gtk::Align::Start);
             self.indicator.add_css_class("osd-indicator");
             self.overlay.add_overlay(&self.indicator);
-
-            self.play_icon.set_visible(false);
-            self.play_icon.set_halign(gtk::Align::Center);
-            self.play_icon.set_valign(gtk::Align::Center);
-            self.play_icon.add_css_class("play-overlay");
-            self.overlay.add_overlay(&self.play_icon);
 
             self.download_button.set_halign(gtk::Align::Center);
             self.download_button.set_valign(gtk::Align::Center);
@@ -158,13 +156,6 @@ mod imp {
         }
     }
 
-    impl MediaVideoTile {
-        fn set_autoplay_on_visibility(&self, autoplay_on_visibility: bool) {
-            self.autoplay_on_visibility.set(autoplay_on_visibility);
-            self.obj().notify("autoplay-on-visibility");
-        }
-    }
-
     impl WidgetImpl for MediaVideoTile {
         fn map(&self) {
             self.parent_map();
@@ -189,9 +180,15 @@ mod imp {
             // its resources allocated, and its synchronous teardown on the
             // main thread at widget destruction could then freeze the whole
             // UI if the pipeline had gotten stuck in the meantime.
-            self.obj().close_media();
+            let obj = self.obj();
+            let imp = obj.imp();
 
-            self.obj().detach_visibility_tracker();
+            // Only animations own a media stream in the chat.
+            if imp.is_animation.get() {
+                obj.close_media();
+            }
+
+            obj.detach_visibility_tracker();
             self.parent_unmap();
         }
 
@@ -271,6 +268,7 @@ impl MediaVideoTile {
 
         imp.is_animation.set(is_animation);
         imp.video_duration_secs.set(duration_secs);
+        *imp.file.borrow_mut() = Some(file.clone());
         // The loader still refers to the previous media here, so the
         // indicator is finalized by `update_status` after binding below.
         self.update_indicator();
@@ -306,13 +304,17 @@ impl MediaVideoTile {
             FileStatus::Downloaded => {
                 imp.download_button.set_visible(false);
 
-                // The video pipeline is only created when the user clicks
-                // to play, so that videos that are merely shown on screen
-                // do not keep a media pipeline alive. Show the preview
-                // until then, so that the tile is not empty.
+                // Show the preview until the media is playing, so that the
+                // tile is not empty.
                 self.try_show_thumbnail();
 
-                self.connect_playback_toggle_handler();
+                if imp.is_animation.get() {
+                    // Animations are played manually by clicking.
+                    self.connect_playback_toggle_handler();
+                } else {
+                    // Videos are opened in the media viewer on click.
+                    self.connect_open_viewer_handler();
+                }
             }
             FileStatus::Downloading(progress) => {
                 let manual = !imp.loader.is_auto();
@@ -349,11 +351,9 @@ impl MediaVideoTile {
             FileStatus::Uploading(_) => {}
         }
 
-        // The indicator and the play icon depend on the loader status: the
-        // former shows the file size while the download is pending, the
-        // latter is only shown once the file is ready to be played.
+        // The indicator depends on the loader status: it shows the file
+        // size while the download is pending.
         self.update_indicator();
-        self.update_play_icon();
     }
 
     /// Loads the video or animation located at `path` into a media stream
@@ -361,6 +361,9 @@ impl MediaVideoTile {
     ///
     /// The playback is started as soon as the stream is ready, if a playback
     /// was requested meanwhile. Clicking the preview toggles the playback.
+    ///
+    /// Only animations reach this: videos are opened in the media viewer
+    /// instead.
     fn prepare_video(&self, path: &glib::GString) {
         let imp = self.imp();
 
@@ -381,27 +384,14 @@ impl MediaVideoTile {
             move |_| {
                 obj.imp().prepared_handler_id.take();
                 obj.maybe_start_playback();
-                obj.update_play_icon();
             }
         ));
         *imp.prepared_handler_id.borrow_mut() = Some(handler_id);
-
-        if !imp.is_animation.get() {
-            media.connect_timestamp_notify(clone!(
-                #[weak(rename_to = obj)]
-                self,
-                move |media| {
-                    obj.update_playback_timestamp(media);
-                }
-            ));
-        }
 
         *imp.media.borrow_mut() = Some(media.clone());
         imp.picture.set_paintable(Some(&media));
 
         imp.media_prepared.set(true);
-
-        self.update_play_icon();
     }
 
     /// Stops the playback and drops the current media, resetting all
@@ -442,8 +432,6 @@ impl MediaVideoTile {
             media.clear();
         }
 
-        imp.started.set(false);
-        imp.ended.set(false);
         imp.pending_play.set(false);
         imp.media_prepared.set(false);
 
@@ -452,8 +440,6 @@ impl MediaVideoTile {
         // Show the preview, so that the tile is not empty once the
         // media stream is closed.
         self.try_show_thumbnail();
-
-        self.update_play_icon();
     }
 
     /// Prepares the media stream from the bound file if it has been downloaded
@@ -496,9 +482,6 @@ impl MediaVideoTile {
     /// Starts the playback if it has been explicitly requested and the
     /// current state allows it: the media must be prepared and visible on
     /// screen, not paused by the user.
-    ///
-    /// Autoplay is disabled, so this only starts a playback that was
-    /// triggered by the user.
     fn maybe_start_playback(&self) {
         let imp = self.imp();
 
@@ -506,7 +489,7 @@ impl MediaVideoTile {
             return;
         }
 
-        if !imp.visible_on_screen.get() || imp.ended.get() || imp.user_paused.get() {
+        if !imp.visible_on_screen.get() || imp.user_paused.get() {
             return;
         }
 
@@ -520,23 +503,18 @@ impl MediaVideoTile {
         }
 
         media.play();
-        imp.started.set(true);
         imp.pending_play.set(false);
-        self.update_play_icon();
     }
 
     /// Pauses the playback because the content went out of sight.
     ///
-    /// The playback is not resumed automatically, as autoplay is disabled;
-    /// the user must click to play again.
+    /// The playback is only resumed when the user clicks to play again.
     fn pause_for_invisibility(&self) {
         if let Some(media) = &*self.imp().media.borrow() {
             if media.is_playing() {
                 media.pause();
             }
         }
-
-        self.update_play_icon();
     }
 
     /// Clicking the media preview starts or pauses the playback.
@@ -570,53 +548,10 @@ impl MediaVideoTile {
             // as it is.
             if media.is_prepared() {
                 media.play();
-                imp.started.set(true);
             } else {
                 imp.pending_play.set(true);
             }
         }
-
-        self.update_play_icon();
-    }
-
-    fn update_playback_timestamp(&self, media: &gtk::MediaFile) {
-        let duration = media.duration();
-        let timestamp = media.timestamp();
-
-        let time = (duration - timestamp) / i64::pow(10, 6);
-        self.update_remaining_time(time);
-    }
-
-    /// Updates the visibility of the play icon according to the current
-    /// playback state.
-    ///
-    /// The play icon is shown whenever the video is not currently playing,
-    /// so that the user can start (or restart) the playback.
-    fn update_play_icon(&self) {
-        let imp = self.imp();
-
-        let media = imp.media.borrow();
-        let is_playing = media
-            .as_ref()
-            .is_some_and(|media| media.is_playing());
-
-        // The play icon is only shown when the video is ready to be
-        // played, i.e. it is downloaded and not playing already. While the
-        // file is downloading or waiting for a manual download, the
-        // download button is shown instead.
-        let show_icon = !imp.is_animation.get()
-            && !is_playing
-            && imp.loader.status() == FileStatus::Downloaded;
-
-        imp.play_icon.set_visible(show_icon);
-
-        if show_icon {
-            imp.play_icon.set_icon_name(Some(PLAY_ICON_NAME));
-        }
-    }
-
-    fn update_remaining_time(&self, time: i64) {
-        self.imp().indicator.set_label(&format_duration(time));
     }
 
     /// Updates the label of the OSD indicator according to the current media
@@ -699,8 +634,7 @@ impl MediaVideoTile {
         self.set_visible_on_screen(false);
     }
 
-    /// Computes whether this widget is sufficiently visible on screen and
-    /// starts or pauses the playback accordingly.
+    /// Computes whether this widget is sufficiently visible on screen.
     ///
     /// The content counts as visible when at least one third of its preview
     /// intersects with the visible area of the chat history. Requiring more
@@ -709,7 +643,7 @@ impl MediaVideoTile {
     fn update_visible_on_screen(&self) {
         let imp = self.imp();
 
-        let visible_on_screen = (|| {
+        let computed = (|| {
             let list_view = imp.list_view.upgrade()?;
 
             let width = imp.picture.width() as f32;
@@ -735,17 +669,17 @@ impl MediaVideoTile {
             let intersection = bounds.intersection(&viewport_rect)?;
 
             Some(intersection.area() * 3.0 >= bounds.area())
-        })()
-        .unwrap_or(false);
+        })();
+
+        let visible_on_screen = computed.unwrap_or(false);
 
         self.set_visible_on_screen(visible_on_screen);
     }
 
     /// Sets whether this widget is sufficiently visible on screen and
-    /// pauses the playback when it goes out of sight. The playback is never
-    /// started automatically, as autoplay is disabled; however, a playback
-    /// that was requested by the user while the content was off screen is
-    /// resumed once the content becomes visible again.
+    /// pauses the playback when it goes out of sight. A playback that was
+    /// requested by the user while the content was off screen is resumed
+    /// once the content becomes visible again.
     fn set_visible_on_screen(&self, visible_on_screen: bool) {
         let imp = self.imp();
 
@@ -789,6 +723,79 @@ impl MediaVideoTile {
                 obj.toggle_playback();
             }
         ));
+    }
+
+    /// Connects the click gesture to open the media viewer.
+    fn connect_open_viewer_handler(&self) {
+        self.replace_click_handler(clone!(
+            #[weak(rename_to = obj)]
+            self,
+            move |_, _, _, _| {
+                obj.open_viewer();
+            }
+        ));
+    }
+
+    /// Sets the message this tile displays.
+    pub(crate) fn set_message(&self, message: &model::Message) {
+        self.imp().message.set(Some(message));
+    }
+
+    /// Sets the entries of the media album this tile belongs to, together
+    /// with the index of this tile's entry.
+    ///
+    /// Clicking the tile opens the media viewer on the whole album, at the
+    /// entry of this tile.
+    pub(crate) fn set_viewer_context(&self, entries: Vec<ViewerEntry>, index: usize) {
+        *self.imp().viewer_context.borrow_mut() = Some((entries, index));
+    }
+
+    /// Builds the viewer item of the media of this tile.
+    ///
+    /// The file is taken from the loader, which tracks the file updates, so
+    /// that it is more recent than the snapshot of the message content.
+    pub(crate) fn viewer_item(&self) -> Option<ViewerItem> {
+        let imp = self.imp();
+
+        Some(ViewerItem::Video {
+            file: imp.loader.file()?,
+            placeholder: imp.thumbnail.preview_texture(),
+            is_animation: imp.is_animation.get(),
+        })
+    }
+
+    /// Opens the media viewer with the media of this tile.
+    ///
+    /// The tile of a media album opens the viewer on the whole album, at
+    /// its own entry. The low-resolution preview is passed along, so that
+    /// the viewer has something to show while the media is decoded.
+    fn open_viewer(&self) {
+        let imp = self.imp();
+
+        let Some(message) = imp.message.upgrade() else {
+            return;
+        };
+
+        let chat = message.chat_();
+
+        if let Some((entries, index)) = &*imp.viewer_context.borrow() {
+            MediaViewer::present(self, &chat, entries.clone(), *index);
+            return;
+        }
+
+        let Some(item) = self.viewer_item() else {
+            return;
+        };
+
+        MediaViewer::present(
+            self,
+            &chat,
+            vec![ViewerEntry {
+                item,
+                message_id: message.id(),
+            }],
+            0,
+        );
     }
 }
 

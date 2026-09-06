@@ -23,11 +23,6 @@ const MAX_NEWER_MESSAGES: i32 = 99;
 /// messages, so that the window is balanced.
 const AROUND_NEWER_MESSAGES: i32 = 50;
 
-/// The number of items the list is trimmed down to.
-const TRIM_TO_ITEMS: usize = 300;
-/// The number of items at which the list is trimmed.
-const TRIM_AT_ITEMS: usize = 500;
-
 #[derive(Error, Debug)]
 pub(crate) enum ChatHistoryError {
     #[error("The chat history is already loading messages")]
@@ -78,8 +73,7 @@ mod imp {
         /// always its oldest message. The other members of the album are not
         /// part of the list; they are owned by the album itself. This map holds
         /// the only strong references to the albums, so entries must be removed
-        /// when their album is not displayed anymore (e.g. when it is trimmed
-        /// from the list).
+        /// when their album is not displayed anymore.
         pub(super) albums: RefCell<HashMap<i64, model::MediaAlbum>>,
         pub(super) handlers: RefCell<Vec<glib::SignalHandlerId>>,
     }
@@ -173,6 +167,8 @@ impl ChatHistoryModel {
         imp.is_unread_anchor.set(is_unread_anchor);
         imp.at_newest.set(at_newest);
 
+        chat.set_history(&obj);
+
         imp.handlers.borrow_mut().push(chat.connect_new_message(
             clone!(
                 #[weak]
@@ -243,7 +239,6 @@ impl ChatHistoryModel {
 
         let count = messages.len();
         self.append(messages);
-        self.trim_front();
         log::debug!("load_older_messages: appended {count} messages, more = true");
         Ok(true)
     }
@@ -407,7 +402,6 @@ impl ChatHistoryModel {
             self.swap_representative(&replaced, &representative);
         }
 
-        self.trim_back();
         log::debug!("load_newer_messages: prepended {count} messages, more = true");
         Ok(true)
     }
@@ -724,117 +718,6 @@ impl ChatHistoryModel {
     fn swap_representative(&self, replaced: &model::Message, representative: &model::Message) {
         self.remove(replaced.clone());
         self.insert_row(representative.clone());
-    }
-
-    /// Returns the number of items to trim, if the list grew beyond the trim
-    /// threshold.
-    fn trimmed_count(&self) -> Option<usize> {
-        let len = self.imp().list.borrow().len();
-
-        (len > TRIM_AT_ITEMS).then(|| len - TRIM_TO_ITEMS)
-    }
-
-    /// Trims the newest items of the list, if it grew beyond the trim threshold.
-    ///
-    /// This is called after older messages were loaded, so the viewport is at
-    /// the oldest end of the list and the newest items are far away from it.
-    /// The trimmed messages are unloaded and are loaded again when the user
-    /// scrolls back to them.
-    fn trim_front(&self) {
-        let imp = self.imp();
-
-        let Some(mut removed) = self.trimmed_count() else {
-            return;
-        };
-
-        // The trimmed messages are not loaded anymore, so the messages newer
-        // than the remaining ones must be loaded again.
-        imp.at_newest.set(false);
-
-        {
-            let mut list = imp.list.borrow_mut();
-            let mut albums = imp.albums.borrow_mut();
-
-            for _ in 0..removed {
-                let Some(item) = list.pop_front() else {
-                    break;
-                };
-
-                // If a media album was trimmed away, forget it, so that it
-                // doesn't leak and is created again when its messages are
-                // loaded again.
-                if let Some(message) = item.message() {
-                    let album_id = message.media_album_id();
-                    if album_id != 0 {
-                        albums.remove(&album_id);
-                    }
-                }
-            }
-
-            // A day divider at the front of the list always belongs to a day
-            // whose messages are before it, so it was trimmed together with
-            // them and must be removed as well.
-            while matches!(
-                list.front().map(|item| item.type_()),
-                Some(model::ChatHistoryItemType::DayDivider(_))
-            ) {
-                list.pop_front();
-                removed += 1;
-            }
-        }
-
-        log::debug!(
-            "Trimmed {} items from the front of the chat history",
-            removed
-        );
-
-        self.upcast_ref::<gio::ListModel>()
-            .items_changed(0, removed as u32, 0);
-    }
-
-    /// Trims the oldest items of the list, if it grew beyond the trim threshold.
-    ///
-    /// This is called after newer messages were loaded or when the view is
-    /// pinned to the newest message, so the viewport is at the newest end of
-    /// the list and the oldest items are far away from it. The trimmed messages
-    /// are unloaded and are loaded again when the user scrolls back to them.
-    pub(crate) fn trim_back(&self) {
-        let imp = self.imp();
-
-        let Some(removed) = self.trimmed_count() else {
-            return;
-        };
-
-        {
-            let mut list = imp.list.borrow_mut();
-            let mut albums = imp.albums.borrow_mut();
-
-            for _ in 0..removed {
-                let Some(item) = list.pop_back() else {
-                    break;
-                };
-
-                // If a media album was trimmed away, forget it, so that it
-                // doesn't leak and is created again when its messages are
-                // loaded again.
-                if let Some(message) = item.message() {
-                    let album_id = message.media_album_id();
-                    if album_id != 0 {
-                        albums.remove(&album_id);
-                    }
-                }
-            }
-
-            // A day divider at the back of the list always belongs to a day
-            // whose messages are right before it, so no day divider can be
-            // orphaned by trimming the back of the list.
-        }
-
-        log::debug!("Trimmed {} items from the back of the chat history", removed);
-
-        let position = imp.list.borrow().len() as u32;
-        self.upcast_ref::<gio::ListModel>()
-            .items_changed(position, removed as u32, 0);
     }
 
     fn remove(&self, message: model::Message) {

@@ -14,6 +14,16 @@ use crate::model;
 use crate::types::ChatId;
 use crate::types::MessageId;
 
+/// A page of the photo and video messages of a chat, as returned by
+/// `Chat::search_media_messages`.
+pub(crate) struct MediaSearchPage {
+    /// The media messages, in reverse chronological order.
+    pub(crate) messages: Vec<model::Message>,
+    /// The id from which the next page must be requested, or `0` if there are
+    /// no more messages.
+    pub(crate) next_from_message_id: MessageId,
+}
+
 #[derive(Clone, Debug, glib::Boxed)]
 #[boxed_type(name = "ChatType")]
 pub(crate) enum ChatType {
@@ -80,6 +90,8 @@ mod imp {
     #[properties(wrapper_type = super::Chat)]
     pub(crate) struct Chat {
         pub(super) messages: RefCell<HashMap<MessageId, glib::WeakRef<model::Message>>>,
+        /// The chat history model that currently displays this chat, if any.
+        pub(super) history: glib::WeakRef<model::ChatHistoryModel>,
         /// Cache of the messages that are replied to by the messages of this
         /// chat, keyed by `(chat_id, message_id)`. A value of `None` means
         /// that the replied message doesn't exist (e.g. it was deleted).
@@ -311,6 +323,19 @@ impl Chat {
 
     pub(crate) fn session_(&self) -> model::ClientStateSession {
         self.session().unwrap()
+    }
+
+    /// The chat history model that currently displays this chat, if any.
+    ///
+    /// The chat only holds a weak reference to the model, so it stays alive
+    /// only while its widget keeps a strong reference to it.
+    pub(crate) fn history(&self) -> Option<model::ChatHistoryModel> {
+        self.imp().history.upgrade()
+    }
+
+    /// Sets the chat history model that displays this chat.
+    pub(crate) fn set_history(&self, history: &model::ChatHistoryModel) {
+        self.imp().history.set(Some(history));
     }
 
     pub(crate) fn is_blocked(&self) -> bool {
@@ -582,6 +607,42 @@ impl Chat {
             .flatten()
             .map(|m| self.insert_message(m))
             .collect())
+    }
+
+    /// Searches for the photo and video messages of this chat, in reverse
+    /// chronological order, starting from the message with the id `from_id`
+    /// (inclusive), or from the last message if `from_id` is 0.
+    ///
+    /// See `searchChatMessages` in the TDLib documentation for more details.
+    pub(crate) async fn search_media_messages(
+        &self,
+        from_id: MessageId,
+        limit: i32,
+    ) -> Result<MediaSearchPage, tdlib::types::Error> {
+        let client_id = self.session_().client_().id();
+        let result = tdlib::functions::search_chat_messages(
+            self.id(),
+            None,
+            String::new(),
+            None,
+            from_id,
+            0,
+            limit,
+            Some(tdlib::enums::SearchMessagesFilter::PhotoAndVideo),
+            client_id,
+        )
+        .await;
+
+        let tdlib::enums::FoundChatMessages::FoundChatMessages(data) = result?;
+
+        Ok(MediaSearchPage {
+            next_from_message_id: data.next_from_message_id,
+            messages: data
+                .messages
+                .into_iter()
+                .map(|m| self.insert_message(m))
+                .collect(),
+        })
     }
 
     pub(crate) async fn mark_as_read(&self) -> Result<(), tdlib::types::Error> {

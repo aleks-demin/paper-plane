@@ -4,6 +4,8 @@ mod chat_history;
 mod chat_history_row;
 mod chat_info_window;
 mod event_row;
+mod media_viewer;
+mod media_viewer_page;
 mod message_row;
 mod send_media_window;
 
@@ -20,6 +22,9 @@ pub(crate) use self::chat_history::ChatHistory;
 pub(crate) use self::chat_history_row::ChatHistoryRow;
 pub(crate) use self::chat_info_window::ChatInfoWindow;
 pub(crate) use self::event_row::EventRow;
+pub(crate) use self::media_viewer::MediaViewer;
+pub(crate) use self::media_viewer::ViewerEntry;
+pub(crate) use self::media_viewer::ViewerItem;
 pub(crate) use self::message_row::MediaPhotoTile;
 pub(crate) use self::message_row::MediaPicture;
 pub(crate) use self::message_row::MediaThumbnail;

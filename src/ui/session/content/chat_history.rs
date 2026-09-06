@@ -194,34 +194,6 @@ mod imp {
                     }
 
                     if let Some(model) = imp.model.borrow().as_ref() {
-                        // The view is pinned to the newest message, so the
-                        // oldest items of the list are far away from the
-                        // viewport and can be trimmed.
-                        //
-                        // The value-changed handler can also be called during
-                        // size allocation, and mutating the model (and thus
-                        // emitting `items-changed`) while the list view is
-                        // allocating corrupts its internal state. Defer the
-                        // mutation to the next main-loop iteration.
-                        if obj.sticky() {
-                            log::debug!("Trimming back chat history after scroll");
-                            glib::idle_add_local_once(clone!(
-                                #[weak]
-                                obj,
-                                #[weak]
-                                model,
-                                move || {
-                                    if obj.imp().is_loading_messages.get() {
-                                        return;
-                                    }
-
-                                    if obj.sticky() {
-                                        model.trim_back();
-                                    }
-                                }
-                            ));
-                        }
-
                         imp.is_loading_messages.set(true);
 
                         utils::spawn(clone!(
@@ -230,8 +202,6 @@ mod imp {
                             #[weak]
                             model,
                             async move {
-                                obj.imp().is_loading_messages.set(false);
-
                                 let result = if near_oldest {
                                     log::debug!("Loading older messages on scroll (limit = 30)");
                                     model.load_older_messages(30).await
@@ -239,6 +209,8 @@ mod imp {
                                     log::debug!("Loading newer messages on scroll (limit = 50)");
                                     model.load_newer_messages(50).await
                                 };
+
+                                obj.imp().is_loading_messages.set(false);
 
                                 if let Err(model::ChatHistoryError::AlreadyLoading) = result {
                                     log::debug!("Scroll-triggered load already in flight");

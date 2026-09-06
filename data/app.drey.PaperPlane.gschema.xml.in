@@ -66,10 +66,5 @@
       <summary>Maximum File Size</summary>
       <description>The maximum size (in bytes) of a file that should be downloaded automatically. Files larger than this will be shown as a preview with a download button.</description>
     </key>
-    <key name="autoplay-videos" type="b">
-      <default>false</default>
-      <summary>Autoplay Videos</summary>
-      <description>Whether to play videos automatically when they become visible. Animations (GIFs) are always played automatically when they are visible.</description>
-    </key>
   </schema>
 </schemalist>

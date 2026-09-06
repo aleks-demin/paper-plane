@@ -20,6 +20,7 @@ pub(crate) use self::components::MapMarker;
 pub(crate) use self::components::MapWindow;
 pub(crate) use self::components::MessageEntry;
 pub(crate) use self::components::PhoneNumberInput;
+pub(crate) use self::components::ScaleRevealer;
 pub(crate) use self::components::Snow;
 pub(crate) use self::components::Sticker;
 pub(crate) use self::login::Code as LoginCode;
@@ -41,6 +42,7 @@ pub(crate) use self::session::MediaPhotoTile;
 pub(crate) use self::session::MediaPicture;
 pub(crate) use self::session::MediaThumbnail;
 pub(crate) use self::session::MediaVideoTile;
+pub(crate) use self::session::MediaViewer;
 pub(crate) use self::session::MessageBase;
 pub(crate) use self::session::MessageBaseExt;
 pub(crate) use self::session::MessageBaseImpl;
@@ -79,6 +81,8 @@ pub(crate) use self::session::SidebarSearchSectionRow;
 pub(crate) use self::session::SidebarSearchSectionType;
 pub(crate) use self::session::SidebarSelection;
 pub(crate) use self::session::Switcher as SessionSwitcher;
+pub(crate) use self::session::ViewerEntry;
+pub(crate) use self::session::ViewerItem;
 pub(crate) use self::window::Window;
 
 pub(crate) fn init() {
@@ -112,6 +116,7 @@ pub(crate) fn init() {
     MediaPicture::static_type();
     MediaThumbnail::static_type();
     MediaVideoTile::static_type();
+    MediaViewer::static_type();
     MessageBase::static_type();
     MessageBubble::static_type();
     MessageDocument::static_type();
@@ -129,6 +134,7 @@ pub(crate) fn init() {
     MessageVenue::static_type();
     MessageVideo::static_type();
     PhoneNumberInput::static_type();
+    ScaleRevealer::static_type();
     PreferencesDialog::static_type();
     SendMediaWindow::static_type();
     Session::static_type();

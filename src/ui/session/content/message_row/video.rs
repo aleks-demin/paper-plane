@@ -132,12 +132,12 @@ impl ui::MessageBaseExt for MessageVideo {
             #[weak(rename_to = obj)]
             self,
             move |message| {
-                obj.update_content(&message.content().0, &message.chat_().session_());
+                obj.update_content(message, &message.content().0, &message.chat_().session_());
             }
         ));
         imp.handler_id.replace(Some(handler_id));
 
-        self.update_content(&message.content().0, &message.chat_().session_());
+        self.update_content(message, &message.content().0, &message.chat_().session_());
 
         self.notify("message");
     }
@@ -146,10 +146,13 @@ impl ui::MessageBaseExt for MessageVideo {
 impl MessageVideo {
     fn update_content(
         &self,
+        message: &model::Message,
         content: &tdlib::enums::MessageContent,
         session: &model::ClientStateSession,
     ) {
         let video_tile = &*self.imp().video_tile;
+
+        video_tile.set_message(message);
 
         match content {
             tdlib::enums::MessageContent::MessageAnimation(data) => {

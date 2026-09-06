@@ -8,6 +8,9 @@ use gtk::subclass::prelude::*;
 
 use crate::model;
 use crate::model::MediaType;
+use crate::ui::MediaViewer;
+use crate::ui::ViewerEntry;
+use crate::ui::ViewerItem;
 use crate::utils;
 
 use super::FileStatus;
@@ -27,6 +30,18 @@ mod imp {
         pub(super) thumbnail: super::super::MediaThumbnail,
         /// The photo that is currently displayed.
         pub(super) photo: RefCell<Option<tdlib::types::Photo>>,
+        /// The message this tile displays.
+        ///
+        /// The media viewer needs it for browsing the media of the chat of
+        /// the message.
+        pub(super) message: glib::WeakRef<model::Message>,
+        /// The entries of the media album this tile belongs to, together
+        /// with the index of this tile's entry, used to open the media
+        /// viewer on the whole album.
+        ///
+        /// This is only set for the tiles of a media album; the tiles of
+        /// single media messages open the viewer on their own media only.
+        pub(super) viewer_context: RefCell<Option<(Vec<ViewerEntry>, usize)>>,
         pub(super) click_handler_id: RefCell<Option<glib::SignalHandlerId>>,
         pub(super) loader_handler_id: RefCell<Option<glib::SignalHandlerId>>,
     }
@@ -190,6 +205,9 @@ impl MediaPhotoTile {
                 if let Some(path) = imp.loader.path() {
                     imp.thumbnail.load_image(path.to_string());
                 }
+
+                // Downloaded photos are opened in the media viewer.
+                self.connect_open_viewer_handler();
             }
             FileStatus::Downloading(progress) => {
                 let manual = !imp.loader.is_auto();
@@ -228,6 +246,81 @@ impl MediaPhotoTile {
             // Photos are never uploaded by this client.
             FileStatus::Uploading(_) => {}
         }
+    }
+
+    /// Connects the click gesture to open the media viewer.
+    fn connect_open_viewer_handler(&self) {
+        self.replace_click_handler(clone!(
+            #[weak(rename_to = obj)]
+            self,
+            move |_, _, _, _| {
+                obj.open_viewer();
+            }
+        ));
+    }
+
+    /// Sets the message this tile displays.
+    pub(crate) fn set_message(&self, message: &model::Message) {
+        self.imp().message.set(Some(message));
+    }
+
+    /// Sets the entries of the media album this tile belongs to, together
+    /// with the index of this tile's entry.
+    ///
+    /// Clicking the tile opens the media viewer on the whole album, at the
+    /// entry of this tile.
+    pub(crate) fn set_viewer_context(&self, entries: Vec<ViewerEntry>, index: usize) {
+        *self.imp().viewer_context.borrow_mut() = Some((entries, index));
+    }
+
+    /// Builds the viewer item of the photo of this tile.
+    ///
+    /// The viewer shows the full-resolution version of the photo, which may
+    /// still have to be downloaded.
+    pub(crate) fn viewer_item(&self) -> Option<ViewerItem> {
+        let imp = self.imp();
+
+        let photo = imp.photo.borrow().clone()?;
+        let photo_size = photo.sizes.last()?.clone();
+
+        Some(ViewerItem::Photo {
+            file: photo_size.photo,
+            placeholder: imp.thumbnail.preview_texture(),
+        })
+    }
+
+    /// Opens the media viewer with the photo of this tile.
+    ///
+    /// The tile of a media album opens the viewer on the whole album, at
+    /// its own entry. The low-resolution preview is passed along, so that
+    /// the viewer has something to show while the photo is decoded.
+    fn open_viewer(&self) {
+        let imp = self.imp();
+
+        let Some(message) = imp.message.upgrade() else {
+            return;
+        };
+
+        let chat = message.chat_();
+
+        if let Some((entries, index)) = &*imp.viewer_context.borrow() {
+            MediaViewer::present(self, &chat, entries.clone(), *index);
+            return;
+        }
+
+        let Some(item) = self.viewer_item() else {
+            return;
+        };
+
+        MediaViewer::present(
+            self,
+            &chat,
+            vec![ViewerEntry {
+                item,
+                message_id: message.id(),
+            }],
+            0,
+        );
     }
 
     /// Replaces the click gesture handler of the media preview.

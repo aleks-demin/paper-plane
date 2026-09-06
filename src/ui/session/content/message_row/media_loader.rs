@@ -31,6 +31,11 @@ mod imp {
         /// The local path of the bound file, if it has been downloaded.
         #[property(get)]
         pub(super) path: RefCell<Option<glib::GString>>,
+        /// The most recent state of the bound file, as reported by TDLib.
+        ///
+        /// This is more recent than the file snapshot of the message
+        /// content, which is not updated when the file is downloaded.
+        pub(super) file: RefCell<Option<tdlib::types::File>>,
         /// Whether the ongoing download was started automatically according
         /// to the auto-download settings instead of a user action.
         #[property(get)]
@@ -107,6 +112,7 @@ impl MediaLoader {
         imp.is_auto.set(false);
         imp.auto_download_pending.set(false);
         *imp.path.borrow_mut() = None;
+        *imp.file.borrow_mut() = Some(file.clone());
 
         match FileStatus::from(file) {
             FileStatus::Downloaded => {
@@ -170,6 +176,12 @@ impl MediaLoader {
         self.imp().session.upgrade()
     }
 
+    /// Returns the most recent state of the bound file, as reported by
+    /// TDLib.
+    pub(crate) fn file(&self) -> Option<tdlib::types::File> {
+        self.imp().file.borrow().clone()
+    }
+
     fn start_download(&self, auto: bool) {
         let imp = self.imp();
         let Some(session) = imp.session.upgrade() else {
@@ -203,6 +215,8 @@ impl MediaLoader {
         if file.local.is_downloading_completed {
             *imp.path.borrow_mut() = Some(file.local.path.clone().into());
         }
+
+        *imp.file.borrow_mut() = Some(file.clone());
 
         self.set_status(FileStatus::from(&file));
     }

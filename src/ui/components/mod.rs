@@ -9,6 +9,7 @@ mod map_marker;
 mod map_window;
 mod message_entry;
 mod phone_number_input;
+mod scale_revealer;
 mod snow;
 mod sticker;
 
@@ -23,5 +24,6 @@ pub(crate) use self::map_marker::MapMarker;
 pub(crate) use self::map_window::MapWindow;
 pub(crate) use self::message_entry::MessageEntry;
 pub(crate) use self::phone_number_input::PhoneNumberInput;
+pub(crate) use self::scale_revealer::ScaleRevealer;
 pub(crate) use self::snow::Snow;
 pub(crate) use self::sticker::Sticker;

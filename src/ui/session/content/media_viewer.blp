@@ -1,0 +1,62 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $PaplMediaViewer: Gtk.Widget {
+  focusable: true;
+  css-classes: ["media-viewer"];
+
+  Adw.ToolbarView toolbar_view {
+    [top]
+    Adw.HeaderBar header_bar {
+      css-classes: ["flat", "osd"];
+      show-title: false;
+
+      [start]
+      Gtk.Button back_button {
+        icon-name: "go-previous-symbolic";
+        action-name: "media-viewer.close";
+        tooltip-text: _("Back");
+        css-classes: ["osd", "circular"];
+      }
+    }
+
+    content: $PaplScaleRevealer revealer {
+      child: Gtk.Overlay {
+        Adw.Carousel carousel {
+          hexpand: true;
+          vexpand: true;
+        }
+
+        [overlay]
+        Gtk.Button previous_button {
+          icon-name: "go-previous-symbolic";
+          halign: start;
+          valign: center;
+          margin-start: 12;
+          css-classes: ["osd", "circular"];
+          visible: false;
+        }
+
+        [overlay]
+        Gtk.Button next_button {
+          icon-name: "go-next-symbolic";
+          halign: end;
+          valign: center;
+          margin-end: 12;
+          css-classes: ["osd", "circular"];
+          visible: false;
+        }
+
+        [overlay]
+        Gtk.MediaControls controls {
+          valign: end;
+          margin-start: 12;
+          margin-end: 12;
+          margin-bottom: 12;
+          css-classes: ["osd"];
+          visible: false;
+        }
+      };
+    };
+  }
+}

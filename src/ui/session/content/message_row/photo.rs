@@ -143,6 +143,7 @@ impl MessagePhoto {
     fn update_photo(&self, message: &model::Message) {
         if let tdlib::enums::MessageContent::MessagePhoto(data) = message.content().0 {
             let session = message.chat_().session_();
+            self.imp().photo_tile.set_message(message);
             self.imp().photo_tile.set_photo(&session, &data.photo);
         }
     }

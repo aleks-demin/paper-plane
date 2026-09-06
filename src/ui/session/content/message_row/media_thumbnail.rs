@@ -119,6 +119,12 @@ impl MediaThumbnail {
         imp.picture.set_paintable(imp.preview.borrow().as_ref());
     }
 
+    /// Returns the low-resolution preview decoded from the minithumbnail, if
+    /// any, for use as a placeholder elsewhere (e.g. in the media viewer).
+    pub(crate) fn preview_texture(&self) -> Option<gdk::Texture> {
+        self.imp().preview.borrow().clone()
+    }
+
     /// Stores the high-resolution thumbnail, if any, so that a higher-quality
     /// preview can be shown once it is downloaded.
     pub(crate) fn set_thumbnail(&self, thumbnail: Option<&tdlib::types::Thumbnail>) {

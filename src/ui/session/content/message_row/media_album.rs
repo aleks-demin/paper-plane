@@ -12,6 +12,8 @@ use glib::clone;
 use crate::model;
 use crate::ui;
 use crate::ui::MessageBaseExt;
+use crate::ui::ViewerEntry;
+use crate::ui::ViewerItem;
 
 /// Computes the grid position of the tile at the given linear index.
 ///
@@ -153,6 +155,8 @@ impl MessageMediaAlbum {
             grid.attach(&tile, column, row, width, 1);
             imp.tiles.borrow_mut().insert(message.id(), tile.downgrade());
         }
+
+        self.update_viewer_contexts(album);
     }
 
     /// Attaches tiles for the messages of the album that are not rendered
@@ -186,6 +190,8 @@ impl MessageMediaAlbum {
             grid.attach(&tile, column, row, width, 1);
             tiles.insert(message.id(), tile.downgrade());
         }
+
+        self.update_viewer_contexts(album);
     }
 
     fn create_tile(
@@ -198,22 +204,79 @@ impl MessageMediaAlbum {
         match &content.0 {
             tdlib::enums::MessageContent::MessagePhoto(data) => {
                 let tile = ui::MediaPhotoTile::default();
+                tile.set_message(message);
                 tile.set_photo(session, &data.photo);
                 tile.upcast()
             }
             tdlib::enums::MessageContent::MessageVideo(data) => {
                 let tile = ui::MediaVideoTile::default();
+                tile.set_message(message);
                 tile.set_video(session, &data.video);
                 tile.upcast()
             }
             tdlib::enums::MessageContent::MessageAnimation(data) => {
                 let tile = ui::MediaVideoTile::default();
+                tile.set_message(message);
                 tile.set_animation(session, &data.animation);
                 tile.upcast()
             }
             // Albums only contain photos, videos and animations, but a
             // content update could change the type of a message.
             _ => gtk::Label::new(Some("Unsupported")).upcast(),
+        }
+    }
+
+    /// Assigns the viewer context to the tiles of the album.
+    ///
+    /// Each tile opens the media viewer on the whole album, at the entry of
+    /// its own message. The items are built from the tiles, which track the
+    /// file updates, and fall back to the message content for the tiles
+    /// that are not alive anymore. The indices are assigned in the order of
+    /// the viewable messages, so that they stay consistent even when some
+    /// messages have no viewable media.
+    fn update_viewer_contexts(&self, album: &model::MediaAlbum) {
+        let imp = self.imp();
+
+        let mut entries: Vec<ViewerEntry> = Vec::new();
+
+        for message in album.messages() {
+            let tile = imp
+                .tiles
+                .borrow()
+                .get(&message.id())
+                .and_then(|tile| tile.upgrade());
+
+            let item = tile
+                .as_ref()
+                .and_then(|tile| {
+                    tile.downcast_ref::<ui::MediaPhotoTile>()
+                        .and_then(ui::MediaPhotoTile::viewer_item)
+                        .or_else(|| {
+                            tile.downcast_ref::<ui::MediaVideoTile>()
+                                .and_then(ui::MediaVideoTile::viewer_item)
+                        })
+                })
+                .or_else(|| ViewerItem::from_message(&message));
+
+            let Some(item) = item else {
+                continue;
+            };
+
+            let index = entries.len();
+            entries.push(ViewerEntry {
+                item,
+                message_id: message.id(),
+            });
+
+            let Some(tile) = tile else {
+                continue;
+            };
+
+            if let Some(photo_tile) = tile.downcast_ref::<ui::MediaPhotoTile>() {
+                photo_tile.set_viewer_context(entries.clone(), index);
+            } else if let Some(video_tile) = tile.downcast_ref::<ui::MediaVideoTile>() {
+                video_tile.set_viewer_context(entries.clone(), index);
+            }
         }
     }
 

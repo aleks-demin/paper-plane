@@ -27,6 +27,9 @@ pub(crate) use self::content::MediaPhotoTile;
     pub(crate) use self::content::MediaPicture;
     pub(crate) use self::content::MediaThumbnail;
     pub(crate) use self::content::MediaVideoTile;
+pub(crate) use self::content::MediaViewer;
+pub(crate) use self::content::ViewerEntry;
+pub(crate) use self::content::ViewerItem;
 pub(crate) use self::content::MessageBase;
 pub(crate) use self::content::MessageBaseExt;
 pub(crate) use self::content::MessageBaseImpl;
@@ -83,6 +86,8 @@ mod imp {
         pub(super) sidebar: TemplateChild<ui::Sidebar>,
         #[template_child]
         pub(super) content: TemplateChild<ui::Content>,
+        #[template_child]
+        pub(super) media_viewer: TemplateChild<ui::MediaViewer>,
     }
 
     #[glib::object_subclass]
@@ -216,6 +221,22 @@ impl Session {
 
     pub(crate) fn handle_paste_action(&self) {
         self.imp().content.handle_paste_action();
+    }
+
+    /// Shows the given media in the media viewer of the session.
+    ///
+    /// The viewer is revealed with a transition that starts at
+    /// `source_widget`.
+    pub(crate) fn show_media_viewer(
+        &self,
+        source_widget: &impl IsA<gtk::Widget>,
+        chat: &model::Chat,
+        entries: Vec<ViewerEntry>,
+        index: usize,
+    ) {
+        self.imp()
+            .media_viewer
+            .open(source_widget, chat, entries, index);
     }
 
     pub(crate) fn set_chat_open(&self, open: bool) {
