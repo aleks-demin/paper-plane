@@ -24,8 +24,11 @@ mod imp {
     pub(crate) struct MediaViewerPage {
         pub(super) overlay: gtk::Overlay,
         pub(super) picture: gtk::Picture,
+        /// The video widget rendering the media stream of a video item, with
+        /// graphics offload enabled and its own built-in media controls.
+        /// Only shown while a stream is bound to it.
+        pub(super) video: gtk::Video,
         pub(super) download_button: MediaDownloadButton,
-        pub(super) controls: gtk::MediaControls,
         pub(super) click: gtk::GestureClick,
         pub(super) loader: MediaLoader,
         /// The item shown by this page.
@@ -70,18 +73,17 @@ mod imp {
             self.picture.set_vexpand(true);
             self.overlay.set_child(Some(&self.picture));
 
+            self.video.set_hexpand(true);
+            self.video.set_vexpand(true);
+            self.video
+                .set_graphics_offload(gtk::GraphicsOffloadEnabled::Enabled);
+            self.video.set_visible(false);
+            self.overlay.add_overlay(&self.video);
+
             self.download_button.set_halign(gtk::Align::Center);
             self.download_button.set_valign(gtk::Align::Center);
             self.download_button.set_visible(false);
             self.overlay.add_overlay(&self.download_button);
-
-            self.controls.set_valign(gtk::Align::End);
-            self.controls.set_margin_start(12);
-            self.controls.set_margin_end(12);
-            self.controls.set_margin_bottom(12);
-            self.controls.add_css_class("osd");
-            self.controls.set_visible(false);
-            self.overlay.add_overlay(&self.controls);
 
             self.click.set_button(1);
             self.overlay.add_controller(self.click.clone());
@@ -133,10 +135,11 @@ impl Default for MediaViewerPage {
 ///
 /// The page is self-contained: it shows the low-resolution preview of its
 /// item until it is displayed, decodes its photo or plays its video on the
-/// shared playback stream of the session, and shows the media controls for
-/// its own video. Videos are never played on a pipeline of their own: the
-/// playback engine of the session owns the single media stream, which the
-/// page binds to itself while it is displayed.
+/// shared playback stream of the session, which its `gtk::Video` provides
+/// the media controls for. Videos are never played on a pipeline of their
+/// own: the playback engine of the session owns the single media stream,
+/// which the page binds to its graphics-offloaded `gtk::Video` while it is
+/// displayed.
 impl MediaViewerPage {
     /// Shows the given item.
     pub(crate) fn set_item(
@@ -166,8 +169,8 @@ impl MediaViewerPage {
 
         *imp.item.borrow_mut() = Some(item);
 
-        imp.controls.set_media_stream(gtk::MediaStream::NONE);
-        imp.controls.set_visible(false);
+        imp.video.set_media_stream(gtk::MediaStream::NONE);
+        imp.video.set_visible(false);
 
         self.update_status();
     }
@@ -235,16 +238,16 @@ impl MediaViewerPage {
         imp.picture.set_paintable(imp.placeholder.borrow().as_ref());
     }
 
-    /// Unbinds the media stream and hides the controls of this page.
+    /// Unbinds the media stream and hides the video widget of this page.
     fn reset_playback_ui(&self) {
         let imp = self.imp();
 
-        imp.controls.set_media_stream(gtk::MediaStream::NONE);
-        imp.controls.set_visible(false);
-
         if imp.is_stream_bound.get() {
             imp.is_stream_bound.set(false);
+            imp.video.set_media_stream(gtk::MediaStream::NONE);
+            imp.video.set_visible(false);
             imp.picture.set_paintable(imp.placeholder.borrow().as_ref());
+            imp.picture.set_visible(true);
         }
     }
 
@@ -271,9 +274,6 @@ impl MediaViewerPage {
         media.set_muted(is_animation);
         media.set_loop(is_animation);
 
-        imp.controls.set_media_stream(Some(&media));
-        imp.controls.set_visible(true);
-
         imp.is_stream_bound.set(false);
         imp.picture.set_paintable(imp.placeholder.borrow().as_ref());
 
@@ -299,7 +299,10 @@ impl MediaViewerPage {
                     }
 
                     imp.is_stream_bound.set(true);
-                    imp.picture.set_paintable(Some(media.upcast_ref::<gdk::Paintable>()));
+                    imp.picture.set_paintable(gdk::Paintable::NONE);
+                    imp.picture.set_visible(false);
+                    imp.video.set_media_stream(Some(media));
+                    imp.video.set_visible(true);
 
                     media.play();
                 }

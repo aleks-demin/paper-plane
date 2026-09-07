@@ -96,11 +96,8 @@ mod imp {
             (size, size, -1, -1)
         }
 
-        #[allow(deprecated)]
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
             let obj = &*self.obj();
-
-            let style_context = obj.style_context();
 
             let size = obj.width() as f32;
             let rect = graphene::Rect::new(0.0, 0.0, size, size);
@@ -111,7 +108,7 @@ mod imp {
 
             let percentage = obj.percentage() as f32;
 
-            let color = style_context.color();
+            let color = obj.color();
             let mut color_alpha = color;
             color_alpha.set_alpha(0.3);
 

@@ -125,10 +125,6 @@ impl PlaybackManager {
     }
 
     /// Whether the stream is currently loaded from `path`.
-    //
-    // Part of the API for the future audio message widgets; only the
-    // media viewer plays media for now.
-    #[allow(dead_code)]
     pub(crate) fn is_current(&self, path: &str) -> bool {
         self.0
             .current_path
@@ -200,10 +196,6 @@ impl PlaybackManager {
     /// Must be called by the widget that started the current playback,
     /// ideally right before or right after `play_file`, so that its
     /// connection doesn't get disconnected by a subsequent call.
-    //
-    // Part of the API for the future audio message widgets; only the
-    // media viewer plays media for now.
-    #[allow(dead_code)]
     pub(crate) fn connect_playing<F: Fn(&gtk::MediaFile) + 'static>(&self, on_playing: F) {
         let id = self.0.media_file.connect_notify_local(
             Some("playing"),
@@ -213,10 +205,6 @@ impl PlaybackManager {
     }
 
     /// Resumes or pauses the current playback.
-    //
-    // Part of the API for the future audio message widgets; only the
-    // media viewer plays media for now.
-    #[allow(dead_code)]
     pub(crate) fn toggle_pause(&self) {
         let media = &self.0.media_file;
         media.set_playing(!media.is_playing());

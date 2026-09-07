@@ -268,6 +268,14 @@ messagebubble.venue .suffix {
   margin-bottom: 3px;
 }
 
+messagebubble.voice {
+  min-width: 220px;
+}
+
+messagebubble.voice .prefix {
+  margin: 3px 0;
+}
+
 messagebubble.document {
   min-width: 220px;
 }

@@ -23,6 +23,7 @@ pub(crate) use self::components::PhoneNumberInput;
 pub(crate) use self::components::ScaleRevealer;
 pub(crate) use self::components::Snow;
 pub(crate) use self::components::Sticker;
+pub(crate) use self::components::Waveform;
 pub(crate) use self::login::Code as LoginCode;
 pub(crate) use self::login::Login;
 pub(crate) use self::login::OtherDevice as LoginOtherDevice;
@@ -61,6 +62,7 @@ pub(crate) use self::session::MessageSticker;
 pub(crate) use self::session::MessageText;
 pub(crate) use self::session::MessageVenue;
 pub(crate) use self::session::MessageVideo;
+pub(crate) use self::session::MessageVoiceNote;
 pub(crate) use self::session::PreferencesDialog;
 pub(crate) use self::session::Row as SessionRow;
 pub(crate) use self::session::SendMediaWindow;
@@ -135,6 +137,7 @@ pub(crate) fn init() {
     MessageText::static_type();
     MessageVenue::static_type();
     MessageVideo::static_type();
+    MessageVoiceNote::static_type();
     PhoneNumberInput::static_type();
     ScaleRevealer::static_type();
     PreferencesDialog::static_type();
@@ -158,6 +161,7 @@ pub(crate) fn init() {
     SidebarSearchSectionRow::static_type();
     SidebarSearchSectionType::static_type();
     Snow::static_type();
+    Waveform::static_type();
     Sticker::static_type();
     Window::static_type();
 }

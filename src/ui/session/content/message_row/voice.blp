@@ -1,0 +1,54 @@
+using Gtk 4.0;
+
+template $PaplMessageVoiceNote : $PaplMessageBase {
+  layout-manager: BinLayout {};
+
+  $PaplMessageBubble message_bubble {
+    styles ["voice"]
+
+    GestureClick click {
+      button: 1;
+    }
+
+    prefix: Box {
+      orientation: vertical;
+      spacing: 3;
+
+      $PaplWaveform waveform {}
+
+      Box {
+        spacing: 6;
+
+        $PaplMediaDownloadButton download_button {
+          visible: false;
+        }
+
+        Image play_image {
+          icon-name: "media-playback-start-symbolic";
+          valign: center;
+        }
+
+        Label duration_label {
+          valign: center;
+
+          styles [
+            "dim-label",
+            "numeric",
+            "caption",
+          ]
+        }
+
+        Box {
+          hexpand: true;
+        }
+
+        /* Reserves space for the message indicators that are overlaid at
+         * the bottom-right corner of the bubble. */
+        Box indicators_space {
+          halign: end;
+          width-request: 56;
+        }
+      }
+    };
+  }
+}
