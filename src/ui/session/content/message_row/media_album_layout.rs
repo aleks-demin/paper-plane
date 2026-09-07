@@ -162,6 +162,13 @@ mod imp {
                     rect.width.round() as i32,
                     rect.height.round() as i32,
                 );
+
+                // GTK requires a child to be measured before it is
+                // allocated. The measured sizes are discarded, as the album
+                // grid assigns computed cell sizes instead.
+                child.measure(gtk::Orientation::Horizontal, -1);
+                child.measure(gtk::Orientation::Vertical, allocation.height());
+
                 child.size_allocate(&allocation, -1);
             }
         }

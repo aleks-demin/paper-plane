@@ -82,8 +82,6 @@ impl PlaybackManager {
             playing_handlers: RefCell::new(Vec::new()),
         });
 
-        // The handlers are connected once and dispatch to the hooks of
-        // whichever widget owns the current playback.
         media_file.connect_notify_local(
             Some("prepared"),
             glib::clone!(
@@ -165,7 +163,6 @@ impl PlaybackManager {
         P: Fn(&gtk::MediaFile) + 'static,
         E: Fn() + 'static,
     {
-        // 1. Stop the previous playback and reset its owner's UI.
         if let Some(on_reset_previous) = self.0.on_reset_previous.take() {
             on_reset_previous();
         }
@@ -174,23 +171,21 @@ impl PlaybackManager {
             self.0.media_file.disconnect(id);
         }
 
-        // 2. Register the new playback.
         *self.0.on_reset_previous.borrow_mut() = Some(Box::new(on_reset));
         *self.0.on_prepared.borrow_mut() = Some(Box::new(on_prepared));
         *self.0.on_error.borrow_mut() = Some(Box::new(on_error));
         *self.0.current_path.borrow_mut() = Some(glib::GString::from(path));
 
-        // 3. Load the new source. The pipeline of the previous source is
-        // freed by clearing the stream before the new one is loaded.
         let media = &self.0.media_file;
         media.pause();
         media.clear();
+        if media.is_prepared() {
+            media.stream_unprepared();
+        }
+        media.invalidate_contents();
         media.set_filename(Some(path));
 
         if media.is_prepared() {
-            // The stream was already prepared (e.g. the same source is
-            // reattached after a clear didn't change the file), so the
-            // `prepared` notification won't fire again.
             let on_prepared = self.0.on_prepared.borrow();
             if let Some(on_prepared) = on_prepared.as_ref() {
                 on_prepared(media);
@@ -251,5 +246,9 @@ impl PlaybackManager {
 
         self.0.media_file.pause();
         self.0.media_file.clear();
+        if self.0.media_file.is_prepared() {
+            self.0.media_file.stream_unprepared();
+        }
+        self.0.media_file.invalidate_contents();
     }
 }

@@ -11,6 +11,7 @@ use crate::model;
 use crate::model::MediaType;
 use crate::utils;
 
+use super::super::playback_manager;
 use super::media_viewer::ViewerItem;
 use super::message_row::FileStatus;
 use super::message_row::MediaDownloadButton;
@@ -24,16 +25,23 @@ mod imp {
         pub(super) overlay: gtk::Overlay,
         pub(super) picture: gtk::Picture,
         pub(super) download_button: MediaDownloadButton,
+        pub(super) controls: gtk::MediaControls,
         pub(super) click: gtk::GestureClick,
         pub(super) loader: MediaLoader,
         /// The item shown by this page.
         pub(super) item: RefCell<Option<ViewerItem>>,
+        /// The shared playback engine used to play the video of this page.
+        pub(super) playback: RefCell<Option<playback_manager::PlaybackManager>>,
         /// The low-resolution preview shown until the media is displayed.
         pub(super) placeholder: RefCell<Option<gdk::Texture>>,
         /// Whether this page is the one displayed by the viewer.
         pub(super) displayed: Cell<bool>,
         /// Whether the photo of this page has been decoded already.
         pub(super) photo_decoded: Cell<bool>,
+        /// Whether the picture shows the media stream of the playback
+        /// engine, in which case it must be restored to the preview when
+        /// the playback is taken over or stopped.
+        pub(super) is_stream_bound: Cell<bool>,
         /// Incremented every time new media is set, used to discard the
         /// results of asynchronous operations that became out-of-date.
         pub(super) generation: Cell<u64>,
@@ -53,9 +61,6 @@ mod imp {
 
             let obj = self.obj();
 
-            // The carousel sizes a page to its natural width unless the page
-            // expands, which would let neighboring pages peek in from the
-            // sides while they show their low-resolution preview.
             obj.set_hexpand(true);
             obj.set_vexpand(true);
 
@@ -69,6 +74,14 @@ mod imp {
             self.download_button.set_valign(gtk::Align::Center);
             self.download_button.set_visible(false);
             self.overlay.add_overlay(&self.download_button);
+
+            self.controls.set_valign(gtk::Align::End);
+            self.controls.set_margin_start(12);
+            self.controls.set_margin_end(12);
+            self.controls.set_margin_bottom(12);
+            self.controls.add_css_class("osd");
+            self.controls.set_visible(false);
+            self.overlay.add_overlay(&self.controls);
 
             self.click.set_button(1);
             self.overlay.add_controller(self.click.clone());
@@ -118,18 +131,28 @@ impl Default for MediaViewerPage {
 
 /// A page of the media viewer, showing a single photo or video.
 ///
-/// The page shows the low-resolution preview of its item until its media is
-/// displayed: photos are decoded once they are downloaded, while the video
-/// is played on the media stream of the viewer, which binds its first frame
-/// to the picture of the page.
+/// The page is self-contained: it shows the low-resolution preview of its
+/// item until it is displayed, decodes its photo or plays its video on the
+/// shared playback stream of the session, and shows the media controls for
+/// its own video. Videos are never played on a pipeline of their own: the
+/// playback engine of the session owns the single media stream, which the
+/// page binds to itself while it is displayed.
 impl MediaViewerPage {
     /// Shows the given item.
-    pub(crate) fn set_item(&self, session: &model::ClientStateSession, item: ViewerItem) {
+    pub(crate) fn set_item(
+        &self,
+        session: &model::ClientStateSession,
+        item: ViewerItem,
+        playback: Option<&playback_manager::PlaybackManager>,
+    ) {
         let imp = self.imp();
 
         imp.generation.set(imp.generation.get() + 1);
         imp.displayed.set(false);
         imp.photo_decoded.set(false);
+        imp.is_stream_bound.set(false);
+
+        *imp.playback.borrow_mut() = playback.cloned();
 
         let placeholder = item.placeholder().cloned();
         imp.picture.set_paintable(placeholder.as_ref());
@@ -143,16 +166,14 @@ impl MediaViewerPage {
 
         *imp.item.borrow_mut() = Some(item);
 
+        imp.controls.set_media_stream(gtk::MediaStream::NONE);
+        imp.controls.set_visible(false);
+
         self.update_status();
     }
 
-    /// The loader of the media file of this item.
-    pub(crate) fn loader(&self) -> MediaLoader {
-        self.imp().loader.clone()
-    }
-
     /// The path of the media file of this item, if it has been downloaded.
-    pub(crate) fn media_path(&self) -> Option<glib::GString> {
+    fn media_path(&self) -> Option<glib::GString> {
         if self.imp().loader.status() != FileStatus::Downloaded {
             return None;
         }
@@ -165,42 +186,132 @@ impl MediaViewerPage {
     /// This is called by the viewer when this page becomes the active one.
     /// The download of the media is started here as well, so that the media
     /// of the pages that are only swiped past is not downloaded.
-    pub(crate) fn display(&self) {
+    pub(crate) fn activate(&self) {
         let imp = self.imp();
 
         imp.displayed.set(true);
 
         imp.loader.maybe_start_auto_download();
 
-        if let Some(ViewerItem::Photo { .. }) = &*imp.item.borrow() {
-            self.maybe_decode_photo();
+        match &*imp.item.borrow() {
+            Some(ViewerItem::Photo { .. }) => {
+                imp.picture
+                    .set_paintable(imp.placeholder.borrow().as_ref());
+
+                self.maybe_decode_photo();
+            }
+            Some(ViewerItem::Video { .. }) => {
+                if imp.loader.status() == FileStatus::CanBeDownloaded {
+                    imp.loader.request_download();
+                }
+
+                if self.media_path().is_some() {
+                    self.start_playback()
+                }
+            }
+            None => {}
         }
     }
 
-    /// Restores this page to its preview after it stopped being displayed.
+    /// Stops displaying the media of this page.
     ///
-    /// The decoded photo or the video frame bound by the viewer is dropped,
-    /// so that at most one item is fully decoded at any time.
-    pub(crate) fn restore(&self) {
+    /// The decoded photo or the video frame bound by the playback is
+    /// dropped, so that at most one item is fully decoded at any time, and
+    /// the playback of the video is stopped if this page owns the shared
+    /// media stream.
+    pub(crate) fn deactivate(&self) {
         let imp = self.imp();
 
         imp.displayed.set(false);
-        imp.photo_decoded.set(false);
+
+        if let (Some(manager), Some(path)) = (imp.playback.borrow().clone(), self.media_path()) {
+            if manager.is_current(&path) {
+                manager.stop();
+            }
+        }
+
+        self.reset_playback_ui();
+
         imp.picture.set_paintable(imp.placeholder.borrow().as_ref());
     }
 
-    /// Binds the given paintable to the picture of this page, or restores
-    /// the preview if there is none.
-    ///
-    /// This is used by the viewer to show the video of its media stream on
-    /// the active page.
-    pub(crate) fn set_media_paintable(&self, paintable: Option<&gdk::Paintable>) {
+    /// Unbinds the media stream and hides the controls of this page.
+    fn reset_playback_ui(&self) {
         let imp = self.imp();
 
-        match paintable {
-            Some(paintable) => imp.picture.set_paintable(Some(paintable)),
-            None => imp.picture.set_paintable(imp.placeholder.borrow().as_ref()),
+        imp.controls.set_media_stream(gtk::MediaStream::NONE);
+        imp.controls.set_visible(false);
+
+        if imp.is_stream_bound.get() {
+            imp.is_stream_bound.set(false);
+            imp.picture.set_paintable(imp.placeholder.borrow().as_ref());
         }
+    }
+
+    /// Plays the video of this page on the shared media stream of the
+    /// session.
+    ///
+    /// Animations loop and stay muted, while videos are played with sound.
+    fn start_playback(&self) {
+        let imp = self.imp();
+
+        let is_animation = match &*imp.item.borrow() {
+            Some(ViewerItem::Video { is_animation, .. }) => *is_animation,
+            _ => return,
+        };
+        let Some(manager) = imp.playback.borrow().clone() else {
+            return;
+        };
+        let Some(path) = self.media_path() else {
+            return;
+        };
+
+        let media = manager.media_file();
+
+        media.set_muted(is_animation);
+        media.set_loop(is_animation);
+
+        imp.controls.set_media_stream(Some(&media));
+        imp.controls.set_visible(true);
+
+        imp.is_stream_bound.set(false);
+        imp.picture.set_paintable(imp.placeholder.borrow().as_ref());
+
+        let generation = imp.generation.get();
+
+        manager.play_file(
+            &path,
+            clone!(
+                #[weak(rename_to = page)]
+                self,
+                move || {
+                    page.reset_playback_ui();
+                }
+            ),
+            clone!(
+                #[weak(rename_to = page)]
+                self,
+                move |media: &gtk::MediaFile| {
+                    let imp = page.imp();
+
+                    if !imp.displayed.get() || imp.generation.get() != generation {
+                        return;
+                    }
+
+                    imp.is_stream_bound.set(true);
+                    imp.picture.set_paintable(Some(media.upcast_ref::<gdk::Paintable>()));
+
+                    media.play();
+                }
+            ),
+            clone!(
+                #[weak(rename_to = page)]
+                self,
+                move || {
+                    page.reset_playback_ui();
+                }
+            ),
+        );
     }
 
     /// Updates the widgets according to the status of the loader.
@@ -211,8 +322,13 @@ impl MediaViewerPage {
             FileStatus::Downloaded => {
                 imp.download_button.set_visible(false);
 
-                if let Some(ViewerItem::Photo { .. }) = &*imp.item.borrow() {
-                    self.maybe_decode_photo();
+                match &*imp.item.borrow() {
+                    Some(ViewerItem::Photo { .. }) => self.maybe_decode_photo(),
+                    Some(ViewerItem::Video { .. }) if imp.displayed.get() => {
+                        self.start_playback()
+                    }
+                    Some(ViewerItem::Video { .. }) => {}
+                    None => {}
                 }
             }
             FileStatus::Downloading(progress) => {
@@ -224,17 +340,22 @@ impl MediaViewerPage {
                 imp.download_button.set_visible(true);
                 imp.download_button.set_status(FileStatus::CanBeDownloaded);
             }
-            // Viewer media is never uploaded by this client.
             FileStatus::Uploading(_) => {}
         }
     }
 
     /// Decodes the photo of this page on a worker thread, if it has been
     /// downloaded and not decoded yet.
+    ///
+    /// Pages that are not displayed are decoded too, so that the whole
+    /// carousel shows the full images of the media that is already
+    /// downloaded instead of the low-resolution previews. The result of a
+    /// page that stopped being displayed in the meantime is stored as its
+    /// preview rather than bound to its picture.
     fn maybe_decode_photo(&self) {
         let imp = self.imp();
 
-        if imp.photo_decoded.get() || !imp.displayed.get() {
+        if imp.photo_decoded.get() {
             return;
         }
 
@@ -262,7 +383,13 @@ impl MediaViewerPage {
 
                 match result {
                     Ok(texture) => {
-                        obj.imp().picture.set_paintable(Some(&texture));
+                        let imp = obj.imp();
+
+                        *imp.placeholder.borrow_mut() = Some(texture.clone().into());
+
+                        if imp.displayed.get() {
+                            imp.picture.set_paintable(Some(&texture));
+                        }
                     }
                     Err(e) => {
                         log::warn!("Error decoding a photo: {e:?}");

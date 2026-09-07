@@ -1,4 +1,5 @@
 use std::cell::{Cell, OnceCell, RefCell};
+use std::iter;
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
@@ -26,6 +27,14 @@ const MEDIA_PAGE_SIZE: i32 = 50;
 /// The beginning of the carousel holds the oldest media, which the user
 /// reaches when navigating back in history.
 const PRELOAD_AHEAD: usize = 3;
+
+/// How many pages are kept alive on each side of the displayed one.
+///
+/// Pages further away are recycled, so that the viewer doesn't keep a
+/// widget and a decoded image for every item of the media it browses. The
+/// window is symmetric, so that the neighbors of the displayed item are
+/// always ready while it is swiped.
+const PAGE_WINDOW: usize = 2;
 
 /// The duration of the animation that fades the background, in ms.
 const ANIMATION_DURATION: u32 = 250;
@@ -76,7 +85,6 @@ impl ViewerItem {
 
         match &content.0 {
             tdlib::enums::MessageContent::MessagePhoto(data) => {
-                // The viewer shows the full-resolution version of the photo.
                 let photo_size = data.photo.sizes.last()?;
                 Some(Self::Photo {
                     file: photo_size.photo.clone(),
@@ -154,8 +162,6 @@ fn collect_newer_entries(chat: &model::Chat, anchor_newest_id: MessageId) -> Vec
 
     let mut entries = Vec::new();
 
-    // The history is ordered from the newest to the oldest message, so it
-    // is walked backwards to end up with the chronological order.
     for i in (0..history.n_items()).rev() {
         let Some(item) = history.item(i).and_downcast::<model::ChatHistoryItem>() else {
             continue;
@@ -166,16 +172,10 @@ fn collect_newer_entries(chat: &model::Chat, anchor_newest_id: MessageId) -> Vec
         };
 
         if message.media_album_id() != 0 {
-            // An album is displayed by its representative, which holds all
-            // of its messages.
             let Some(album) = message.media_album() else {
                 continue;
             };
 
-            // A message with an id that is not newer than the newest one of
-            // the initially displayed group is displayed already, so the
-            // entries of the album are filtered per message instead of
-            // skipping the whole album at once.
             entries.extend(album.messages().into_iter().filter_map(|message| {
                 if message.id() <= anchor_newest_id {
                     return None;
@@ -188,7 +188,6 @@ fn collect_newer_entries(chat: &model::Chat, anchor_newest_id: MessageId) -> Vec
             }));
         } else {
             if message.id() <= anchor_newest_id {
-                // The initially displayed message or an older one.
                 continue;
             }
 
@@ -220,15 +219,30 @@ mod imp {
         pub(super) previous_button: TemplateChild<gtk::Button>,
         #[template_child]
         pub(super) next_button: TemplateChild<gtk::Button>,
-        #[template_child]
-        pub(super) controls: TemplateChild<gtk::MediaControls>,
         /// The session this viewer belongs to.
         pub(super) session: glib::WeakRef<model::ClientStateSession>,
         /// The chat whose media is browsed by this viewer.
         pub(super) chat: glib::WeakRef<model::Chat>,
         /// The entries shown by the viewer, in chronological order, from
         /// the oldest to the newest message.
+        ///
+        /// This is the single source of truth of the content of the viewer:
+        /// the carousel only holds the pages of the entries around the
+        /// displayed one, which are recycled as the user navigates.
         pub(super) entries: RefCell<Vec<ViewerEntry>>,
+        /// The live page of each entry, if any.
+        ///
+        /// This is always aligned with `entries`: the page of an entry is
+        /// `Some` only while the entry is within the window of pages kept
+        /// alive around the displayed one.
+        pub(super) pages: RefCell<Vec<Option<MediaViewerPage>>>,
+        /// The pages that were recycled and can be reused for other
+        /// entries.
+        pub(super) pool: RefCell<Vec<MediaViewerPage>>,
+        /// Whether the live pages are currently being reconciled with the
+        /// entries, in which case the page changes caused by the inserts
+        /// and removals of the carousel are ignored.
+        pub(super) is_reconciling: Cell<bool>,
         /// The id of the oldest media message that is shown. Fetched
         /// messages with a greater or equal id are known already and are
         /// filtered out.
@@ -284,8 +298,6 @@ mod imp {
 
             let imp = obj.imp();
 
-            // The shortcuts are handled while the focus is within the
-            // viewer, which grabs the focus when it is revealed.
             let shortcut_controller = gtk::ShortcutController::new();
             shortcut_controller.set_scope(gtk::ShortcutScope::Local);
             shortcut_controller.add_shortcut(gtk::Shortcut::new(
@@ -338,7 +350,6 @@ mod imp {
                 }
             ));
 
-            // Hide the viewer once the hiding transition is done.
             imp.revealer.connect_transition_done(clone!(
                 #[weak]
                 obj,
@@ -351,10 +362,9 @@ mod imp {
         }
 
         fn dispose(&self) {
-            // The stream is closed explicitly, so that the teardown of a
-            // possibly stuck pipeline happens here rather than lazily at
-            // the finalization of the media stream.
-            self.obj().stop_video();
+            if let Some(manager) = self.obj().playback_manager() {
+                manager.stop();
+            }
 
             self.dispose_template();
         }
@@ -362,7 +372,8 @@ mod imp {
 
     impl WidgetImpl for MediaViewer {
         fn size_allocate(&self, width: i32, height: i32, baseline: i32) {
-            // The toolbar view fills the whole viewer.
+            self.toolbar_view.measure(gtk::Orientation::Vertical, width);
+
             let allocation = gtk::Allocation::new(0, 0, width, height);
             self.toolbar_view.size_allocate(&allocation, baseline);
         }
@@ -370,8 +381,6 @@ mod imp {
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
             let obj = self.obj();
 
-            // Change the background opacity depending on the progress of
-            // the animation that fades the background.
             let progress = self.fade_animation().value();
 
             if progress > 0.0 {
@@ -394,7 +403,6 @@ mod imp {
                     #[weak]
                     obj,
                     move |value| {
-                        // Fade the header bar content too.
                         obj.imp().header_bar.set_opacity(value);
 
                         obj.queue_draw();
@@ -466,21 +474,17 @@ impl MediaViewer {
         let imp = self.imp();
         let session = chat.session_();
 
-        // Results of asynchronous operations that were started for a
-        // previous opening of the viewer become irrelevant.
         imp.open_generation.set(imp.open_generation.get() + 1);
         imp.closed.set(false);
         imp.is_fetching.set(false);
 
-        // The playback of a previous opening doesn't survive the new one.
-        self.stop_video();
+        if let Some(manager) = self.playback_manager() {
+            manager.stop();
+        }
 
         imp.session.set(Some(&session));
         imp.chat.set(Some(chat));
 
-        // The media that is newer than the initially displayed group is
-        // taken from the loaded history of the chat, so that the user can
-        // navigate to it without having to load anything.
         let anchor_newest_id = entries
             .iter()
             .map(|entry| entry.message_id)
@@ -489,10 +493,6 @@ impl MediaViewer {
         let prefix = collect_newer_entries(chat, anchor_newest_id);
         let index = index.min(entries.len() - 1);
 
-        // The first batch of older media is searched from the oldest
-        // message of the initially displayed group. The search includes
-        // that message, so the duplicates are filtered out when a batch
-        // arrives.
         let anchor_oldest_id = entries
             .iter()
             .map(|entry| entry.message_id)
@@ -502,26 +502,36 @@ impl MediaViewer {
         imp.next_older_id.set(anchor_oldest_id);
         imp.has_more.set(true);
 
-        // The carousel may still hold the pages of a previous opening.
-        while imp.carousel.n_pages() > 0 {
-            imp.carousel.remove(&imp.carousel.nth_page(0));
+        let recycled: Vec<MediaViewerPage> = imp
+            .pages
+            .borrow_mut()
+            .drain(..)
+            .flatten()
+            .collect();
+        for page in recycled {
+            page.deactivate();
+            imp.carousel.remove(&page);
+            imp.pool.borrow_mut().push(page);
         }
 
         *imp.entries.borrow_mut() = entries.into_iter().chain(prefix).collect();
+        *imp.pages.borrow_mut() = vec![None; imp.entries.borrow().len()];
         imp.active_page.set(None);
-
-        self.fill_pages(&session);
-
-        // The carousel starts at the item the viewer was opened for.
         imp.active_index.set(index);
-        let page = imp.carousel.nth_page(index as u32);
+
+        self.reconcile_pages(&session);
+
+        let page = imp
+            .pages
+            .borrow()
+            .get(imp.active_index.get())
+            .cloned()
+            .flatten()
+            .unwrap();
         imp.carousel.scroll_to(&page, false);
-        self.update_navigation(index);
 
-        self.display_item(index);
+        self.display_item(imp.active_index.get());
 
-        // The older media is loaded right away, so that navigating
-        // towards it doesn't have to wait for the first search.
         self.maybe_fetch_older();
 
         self.reveal(source_widget);
@@ -534,12 +544,10 @@ impl MediaViewer {
         self.set_visible(true);
         self.grab_focus();
 
-        // Trigger the revealer.
         imp.revealer
             .set_source_widget(Some(source_widget.upcast_ref()));
         imp.revealer.set_reveal_child(true);
 
-        // Fade in the background.
         let animation = imp.fade_animation();
         animation.set_value_from(animation.value());
         animation.set_value_to(1.0);
@@ -556,105 +564,126 @@ impl MediaViewer {
 
         imp.closed.set(true);
 
-        // The playback is stopped right away; it is not visible behind the
-        // fade-out.
-        self.stop_video();
+        if let Some(page) = imp.active_page.upgrade() {
+            page.deactivate();
+        }
 
-        // Trigger the revealer.
         imp.revealer.set_reveal_child(false);
 
-        // Fade out the background.
         let animation = imp.fade_animation();
         animation.set_value_from(animation.value());
         animation.set_value_to(0.0);
         animation.play();
     }
 
-    /// Creates a page for every entry and adds it to the carousel.
-    fn fill_pages(&self, session: &model::ClientStateSession) {
-        for entry in self.imp().entries.borrow().iter() {
-            self.append_entry(session, entry);
-        }
-    }
-
-    /// Creates a page for the given entry and adds it to the end of the
-    /// carousel.
-    fn append_entry(&self, session: &model::ClientStateSession, entry: &ViewerEntry) {
-        let page = self.make_page(session, entry);
-
-        self.imp().carousel.append(&page);
-    }
-
-    /// Creates a page for each of the given entries and inserts them at the
-    /// beginning of the carousel, keeping the carousel on the page it is
-    /// currently showing.
+    /// Makes sure that a page exists for every entry within the window
+    /// around the displayed one, and recycles the pages outside of it.
     ///
-    /// The entries must be in reverse chronological order, so that inserting
-    /// them one by one results in a chronologically ordered carousel.
-    fn prepend_entries(&self, session: &model::ClientStateSession, new_entries: &[ViewerEntry]) {
+    /// The carousel only ever holds the pages of the window, in the order
+    /// of the entries. Inserts and removals shift the indices reported by
+    /// the carousel, so the changes it reports while this method runs are
+    /// ignored and the index of the displayed page is re-derived from the
+    /// page itself afterwards.
+    fn reconcile_pages(&self, session: &model::ClientStateSession) {
         let imp = self.imp();
 
-        if new_entries.is_empty() {
+        if imp.closed.get() {
             return;
         }
 
-        // The index of the displayed page shifts by the number of inserted
-        // pages. It is adjusted upfront, so that the position notifications
-        // of the inserts see the index of the page that is displayed in the
-        // end.
-        imp.active_index.set(imp.active_index.get() + new_entries.len());
-
-        for entry in new_entries {
-            self.prepend_entry(session, entry);
+        let count = imp.entries.borrow().len();
+        if count == 0 {
+            return;
         }
 
-        imp.entries
-            .borrow_mut()
-            .splice(0..0, new_entries.iter().cloned());
-    }
+        imp.is_reconciling.set(true);
 
-    /// Creates a page for the given entry and inserts it at the beginning of
-    /// the carousel.
-    fn prepend_entry(&self, session: &model::ClientStateSession, entry: &ViewerEntry) {
-        let page = self.make_page(session, entry);
+        let active = imp.active_index.get().min(count - 1);
+        imp.active_index.set(active);
 
-        self.imp().carousel.insert(&page, 0);
-    }
+        let start = active.saturating_sub(PAGE_WINDOW);
+        let end = (active + PAGE_WINDOW).min(count - 1);
 
-    /// Creates a page for the given entry, tracking the status of its media
-    /// file.
-    fn make_page(&self, session: &model::ClientStateSession, entry: &ViewerEntry) -> MediaViewerPage {
-        let page = MediaViewerPage::default();
-        page.set_item(session, entry.item.clone());
+        let recycled: Vec<MediaViewerPage> = {
+            let mut pages = imp.pages.borrow_mut();
+            let mut recycled = Vec::new();
 
-        // The viewer plays the video of a page as soon as its download
-        // completes.
-        page.loader().connect_status_notify(clone!(
-            #[weak(rename_to = obj)]
-            self,
-            #[weak]
-            page,
-            move |_| {
-                obj.handle_media_status(&page);
+            for (i, slot) in pages.iter_mut().enumerate() {
+                if (i < start || i > end) && slot.is_some() {
+                    recycled.push(slot.take().unwrap());
+                }
             }
-        ));
+
+            recycled
+        };
+
+        for page in recycled {
+            page.deactivate();
+            imp.carousel.remove(&page);
+            imp.pool.borrow_mut().push(page);
+        }
+
+        // Create or reuse a page for every entry of the window that has
+        // none yet.
+        for i in start..=end {
+            if imp.pages.borrow()[i].is_some() {
+                continue;
+            }
+
+            let page = self.make_page(session, i);
+
+            let position = imp.pages.borrow()[..i]
+                .iter()
+                .filter(|slot| slot.is_some())
+                .count() as u32;
+            imp.carousel.insert(&page, position as i32);
+
+            imp.pages.borrow_mut()[i] = Some(page);
+        }
+
+        if let Some(selected) = imp.active_page.upgrade() {
+            if let Some(index) = imp
+                .pages
+                .borrow()
+                .iter()
+                .position(|slot| slot.as_ref() == Some(&selected))
+            {
+                imp.active_index.set(index);
+            }
+        }
+
+        imp.is_reconciling.set(false);
+
+        self.update_navigation(imp.active_index.get());
+    }
+
+    /// Creates a page for the entry at the given index, reusing a recycled
+    /// page if there is one.
+    fn make_page(&self, session: &model::ClientStateSession, index: usize) -> MediaViewerPage {
+        let imp = self.imp();
+        let entry = imp.entries.borrow()[index].clone();
+        let page = imp.pool.borrow_mut().pop().unwrap_or_default();
+
+        page.set_item(session, entry.item, self.playback_manager().as_ref());
 
         page
     }
 
-    /// The number of pages of the carousel.
-    fn page_count(&self) -> u32 {
-        self.imp().carousel.n_pages()
+    /// The shared playback engine of the session this viewer belongs to.
+    fn playback_manager(&self) -> Option<playback_manager::PlaybackManager> {
+        self.ancestor(Session::static_type())
+            .and_downcast::<Session>()
+            .map(|session| session.playback_manager().clone())
     }
 
     /// Updates the navigation UI for the given index.
     fn update_navigation(&self, index: usize) {
         let imp = self.imp();
-        let count = self.page_count();
+        let count = imp.entries.borrow().len();
 
         imp.previous_button
             .set_visible(index > 0 || imp.has_more.get());
-        imp.next_button.set_visible(index + 1 < count as usize);
+        imp.next_button.set_visible(index + 1 < count);
     }
 
     /// Navigates to the next or previous item, if there is one.
@@ -665,7 +694,7 @@ impl MediaViewer {
     fn navigate(&self, delta: i32) {
         let imp = self.imp();
 
-        let count = self.page_count() as i64;
+        let count = imp.entries.borrow().len() as i64;
         let index = imp.active_index.get() as i64 + delta as i64;
 
         if index < 0 {
@@ -680,7 +709,16 @@ impl MediaViewer {
             return;
         }
 
-        let page = imp.carousel.nth_page(index as u32);
+        let Some(page) = imp
+            .pages
+            .borrow()
+            .get(index as usize)
+            .cloned()
+            .flatten()
+        else {
+            return;
+        };
+
         imp.carousel.scroll_to(&page, true);
     }
 
@@ -692,21 +730,45 @@ impl MediaViewer {
     fn handle_page_changed(&self, index: u32) {
         let imp = self.imp();
 
-        let index = index as usize;
-
-        // An empty carousel emits `(int)index == -1`, which arrives here as
-        // `u32::MAX`. The viewer is never empty, but the guard is cheap.
-        if index >= self.page_count() as usize {
+        if imp.closed.get() || imp.is_reconciling.get() {
             return;
         }
 
-        self.update_navigation(index);
+        let widget = imp.carousel.nth_page(index);
+        let Some(page) = widget.downcast_ref::<MediaViewerPage>() else {
+            return;
+        };
 
-        if index != imp.active_index.get() {
-            self.display_item(index);
+        let Some(entry_index) = imp
+            .pages
+            .borrow()
+            .iter()
+            .position(|slot| slot.as_ref() == Some(page))
+        else {
+            return;
+        };
+
+        if let Some(selected) = imp.active_page.upgrade() {
+            if selected == *page {
+                imp.active_index.set(entry_index);
+                self.update_navigation(entry_index);
+                self.maybe_preload(entry_index);
+
+                return;
+            }
         }
 
-        self.maybe_preload(index);
+        self.update_navigation(entry_index);
+
+        imp.active_index.set(entry_index);
+
+        if let Some(session) = imp.session.upgrade() {
+            self.reconcile_pages(&session);
+        }
+
+        self.display_item(entry_index);
+
+        self.maybe_preload(entry_index);
     }
 
     /// Fetches the next batch of older media if the user is close to the
@@ -749,8 +811,6 @@ impl MediaViewer {
 
                 let imp = obj.imp();
 
-                // The result is irrelevant if the viewer was closed or
-                // reopened for another group of media in the meantime.
                 if imp.closed.get() || imp.open_generation.get() != generation {
                     return;
                 }
@@ -782,9 +842,6 @@ impl MediaViewer {
         imp.has_more.set(page.next_from_message_id != 0);
         imp.next_older_id.set(page.next_from_message_id);
 
-        // The search includes the message it started from and may overlap
-        // with the previous batches, so the messages that are known already
-        // are filtered out.
         let oldest_known_id = imp.oldest_message_id.get();
         let fetched: Vec<model::Message> = page
             .messages
@@ -793,7 +850,6 @@ impl MediaViewer {
             .collect();
 
         if fetched.is_empty() {
-            // No new media was found.
             self.update_navigation(imp.active_index.get());
             return;
         }
@@ -812,9 +868,22 @@ impl MediaViewer {
             })
             .collect();
 
-        self.prepend_entries(session, &new_entries);
+        if new_entries.is_empty() {
+            self.update_navigation(imp.active_index.get());
+            return;
+        }
 
-        // The total count may have changed even if nothing was appended.
+        let n_new = new_entries.len();
+        imp.active_index.set(imp.active_index.get() + n_new);
+        imp.entries
+            .borrow_mut()
+            .splice(0..0, new_entries.into_iter().rev());
+        imp.pages
+            .borrow_mut()
+            .splice(0..0, iter::repeat_n(None, n_new));
+
+        self.reconcile_pages(session);
+
         self.update_navigation(imp.active_index.get());
 
         self.maybe_preload(imp.active_index.get());
@@ -822,10 +891,11 @@ impl MediaViewer {
 
     /// Displays the item at the given index.
     ///
-    /// The previously displayed page is restored to its preview, so that at
-    /// most one item is fully decoded at any time. A photo is decoded right
-    /// away, while the playback of a video is started as soon as its file
-    /// is downloaded.
+    /// The previously displayed page is deactivated, so that at most one
+    /// item is fully decoded and one video is played at any time. The
+    /// display itself is up to the page: a photo is decoded right away,
+    /// while the playback of a video is started as soon as its file is
+    /// downloaded.
     fn display_item(&self, index: usize) {
         let imp = self.imp();
 
@@ -833,172 +903,19 @@ impl MediaViewer {
             return;
         }
 
-        let Some(item) = imp
-            .entries
-            .borrow()
-            .get(index)
-            .map(|entry| entry.item.clone())
-        else {
-            return;
-        };
-
-        let Some(page) = imp
-            .carousel
-            .nth_page(index as u32)
-            .downcast_ref::<MediaViewerPage>()
-            .cloned()
-        else {
+        let Some(page) = imp.pages.borrow().get(index).cloned().flatten() else {
             return;
         };
 
         imp.active_index.set(index);
 
         if let Some(previous_page) = imp.active_page.upgrade() {
-            previous_page.restore();
+            if previous_page != page {
+                previous_page.deactivate();
+            }
         }
         imp.active_page.set(Some(&page));
 
-        match &item {
-            ViewerItem::Photo { .. } => {
-                self.stop_video();
-                page.display();
-            }
-            ViewerItem::Video { is_animation, .. } => {
-                if let Some(path) = page.media_path() {
-                    self.play_video(&path, *is_animation);
-                } else {
-                    // The video still has to be downloaded. The playback is
-                    // started as soon as the download completes (see
-                    // `handle_media_status`).
-                    self.stop_video();
-                    page.display();
-                }
-            }
-        }
-    }
-
-    /// Reacts to a status change of the media file of one of the pages.
-    ///
-    /// When the download of the video of the active page completes, its
-    /// playback is started.
-    fn handle_media_status(&self, page: &MediaViewerPage) {
-        let imp = self.imp();
-
-        if imp.closed.get() || imp.active_page.upgrade().as_ref() != Some(page) {
-            return;
-        }
-
-        let Some(item) = imp
-            .entries
-            .borrow()
-            .get(imp.active_index.get())
-            .map(|entry| entry.item.clone())
-        else {
-            return;
-        };
-
-        if let ViewerItem::Video { is_animation, .. } = &item {
-            if let Some(path) = page.media_path() {
-                self.play_video(&path, *is_animation);
-            } else {
-                // The download may have been canceled.
-                self.stop_video();
-            }
-        }
-    }
-
-    /// The shared playback engine of the session this viewer belongs to.
-    fn playback_manager(&self) -> Option<playback_manager::PlaybackManager> {
-        self.ancestor(Session::static_type())
-            .and_downcast::<Session>()
-            .map(|session| session.playback_manager().clone())
-    }
-
-    /// Plays the video at `path`, taking the shared
-    /// playback stream of the session over from the previous playback.
-    ///
-    /// Animations loop and stay muted, while videos are played with sound.
-    fn play_video(&self, path: &glib::GString, is_animation: bool) {
-        let imp = self.imp();
-
-        let Some(manager) = self.playback_manager() else {
-            return;
-        };
-        let media = manager.media_file();
-
-        // The configuration applies to the upcoming source, which is
-        // loaded by the manager afterwards.
-        media.set_muted(is_animation);
-        // The looping state is always set anew, so that a looping playback
-        // doesn't leak into the next, non-looping one.
-        media.set_loop(is_animation);
-
-        // The page keeps showing its preview until the stream is prepared,
-        // so that it doesn't flash black.
-        imp.controls.set_media_stream(Some(&media));
-        imp.controls.set_visible(true);
-
-        // When the stream is prepared, the first frame replaces the
-        // low-resolution preview of the active page and the playback
-        // starts.
-        manager.play_file(
-            path,
-            // Reset the UI when another playback takes over.
-            clone!(
-                #[weak(rename_to = obj)]
-                self,
-                move || {
-                    obj.imp().controls.set_media_stream(gtk::MediaStream::NONE);
-                    obj.imp().controls.set_visible(false);
-                }
-            ),
-            // The stream is ready to be displayed and played.
-            clone!(
-                #[weak(rename_to = obj)]
-                self,
-                move |media: &gtk::MediaFile| {
-                    let imp = obj.imp();
-
-                    // The viewer was closed while the stream was being
-                    // prepared, so the playback must not start.
-                    if imp.closed.get() {
-                        return;
-                    }
-
-                    if let Some(page) = imp.active_page.upgrade() {
-                        page.set_media_paintable(Some(media.upcast_ref()));
-                    }
-
-                    media.play();
-                }
-            ),
-            // The playback can't continue, so the viewer is closed.
-            clone!(
-                #[weak(rename_to = obj)]
-                self,
-                move || {
-                    obj.stop_video();
-                    obj.close();
-                }
-            ),
-        );
-    }
-
-    /// Stops the playback and closes the shared media stream of the
-    /// session, freeing the resources of the underlying pipeline.
-    ///
-    /// Closing the stream is essential: merely pausing it would leave a
-    /// full media pipeline behind, whose teardown happens synchronously on
-    /// the main thread when the stream is eventually dropped. If such a
-    /// leftover pipeline got stuck, the whole UI would freeze.
-    fn stop_video(&self) {
-        let imp = self.imp();
-
-        if let Some(manager) = self.playback_manager() {
-            manager.stop();
-        }
-
-        imp.controls.set_media_stream(gtk::MediaStream::NONE);
-        imp.controls.set_visible(false);
+        page.activate();
     }
 }

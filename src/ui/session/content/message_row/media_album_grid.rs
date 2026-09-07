@@ -2,6 +2,8 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
+use crate::utils;
+
 use super::media_album_layout::MediaAlbumLayout;
 
 mod imp {
@@ -27,6 +29,9 @@ mod imp {
 
             self.obj()
                 .set_layout_manager(Some(MediaAlbumLayout::default()));
+        }
+        fn dispose(&self) {
+            utils::unparent_children(&*self.obj());
         }
     }
 

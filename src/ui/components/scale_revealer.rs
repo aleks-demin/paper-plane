@@ -10,7 +10,6 @@ mod imp {
     use std::cell::{Cell, OnceCell, RefCell};
     use std::sync::LazyLock;
 
-    use adw::prelude::*;
     use adw::subclass::prelude::*;
     use gtk::gdk;
     use gtk::glib;
