@@ -390,6 +390,63 @@ messagebubble.media.with-label mediapicture {
   margin-bottom: 6px;
 }
 
+messagebubble.media mediaalbumgrid {
+  /* Negate margins to achieve 1px padding with the message bubble */
+  margin: -5px -8px;
+}
+
+messagebubble.media.with-reply mediaalbumgrid {
+  margin-top: 3px;
+}
+
+messagebubble.media.with-label mediaalbumgrid {
+  margin-bottom: 6px;
+}
+
+messagebubble.media mediaalbumgrid mediapicture {
+  margin: 0;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 0;
+}
+
+messagebubble.media.with-reply mediaalbumgrid mediapicture {
+  margin-top: 0;
+}
+
+messagebubble.media.with-label mediaalbumgrid mediapicture {
+  margin-bottom: 0;
+}
+
+/* Rounded corners on the tiles at the edges of the album */
+messagebubble.media mediaalbumgrid .edge-top.edge-left mediapicture {
+  border-top-left-radius: 14px;
+}
+
+messagebubble.media mediaalbumgrid .edge-top.edge-right mediapicture {
+  border-top-right-radius: 14px;
+}
+
+messagebubble.media mediaalbumgrid .edge-bottom.edge-left mediapicture {
+  border-bottom-left-radius: 14px;
+}
+
+messagebubble.media mediaalbumgrid .edge-bottom.edge-right mediapicture {
+  border-bottom-right-radius: 14px;
+}
+
+/* The album is not flush with the bubble when a reply or a caption is
+   above or below it, so its top or bottom tiles have square corners */
+messagebubble.media.with-reply mediaalbumgrid .edge-top mediapicture {
+  border-top-right-radius: 0;
+  border-top-left-radius: 0;
+}
+
+messagebubble.media.with-label mediaalbumgrid .edge-bottom mediapicture {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
 messageindicators image {
   -gtk-icon-size: 14px;
 }

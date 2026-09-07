@@ -6,10 +6,6 @@ template $PaplMessageMediaAlbum : $PaplMessageBase {
   $PaplMessageBubble message_bubble {
     styles ["media"]
 
-    prefix: Grid grid {
-      row-spacing: 2;
-      column-spacing: 2;
-      column-homogeneous: true;
-    };
+    prefix: $PaplMediaAlbumGrid grid {};
   }
 }

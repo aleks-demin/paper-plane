@@ -14,6 +14,7 @@ use crate::ui::{ScaleRevealer, Session};
 use crate::utils;
 
 use super::media_viewer_page::MediaViewerPage;
+use super::super::playback_manager;
 
 /// The number of media messages requested per search when older media is
 /// loaded.
@@ -171,16 +172,15 @@ fn collect_newer_entries(chat: &model::Chat, anchor_newest_id: MessageId) -> Vec
                 continue;
             };
 
-            let Some(last_message_id) = album.last_message_id() else {
-                continue;
-            };
-
-            if last_message_id <= anchor_newest_id {
-                // The album is the initially displayed one or an older one.
-                continue;
-            }
-
+            // A message with an id that is not newer than the newest one of
+            // the initially displayed group is displayed already, so the
+            // entries of the album are filtered per message instead of
+            // skipping the whole album at once.
             entries.extend(album.messages().into_iter().filter_map(|message| {
+                if message.id() <= anchor_newest_id {
+                    return None;
+                }
+
                 stream_item(&message).map(|item| ViewerEntry {
                     item,
                     message_id: message.id(),
@@ -244,9 +244,6 @@ mod imp {
         pub(super) active_index: Cell<usize>,
         /// The page of the currently displayed item, if any.
         pub(super) active_page: glib::WeakRef<MediaViewerPage>,
-        /// The media stream the videos are played on, created lazily on the
-        /// first playback.
-        pub(super) media: RefCell<Option<gtk::MediaFile>>,
         /// Whether the viewer was closed, in which case no item may be
         /// displayed anymore.
         ///
@@ -868,7 +865,7 @@ impl MediaViewer {
             }
             ViewerItem::Video { is_animation, .. } => {
                 if let Some(path) = page.media_path() {
-                    self.play_video(&page, &path, *is_animation);
+                    self.play_video(&path, *is_animation);
                 } else {
                     // The video still has to be downloaded. The playback is
                     // started as soon as the download completes (see
@@ -902,7 +899,7 @@ impl MediaViewer {
 
         if let ViewerItem::Video { is_animation, .. } = &item {
             if let Some(path) = page.media_path() {
-                self.play_video(page, &path, *is_animation);
+                self.play_video(&path, *is_animation);
             } else {
                 // The download may have been canceled.
                 self.stop_video();
@@ -910,106 +907,85 @@ impl MediaViewer {
         }
     }
 
-    /// Returns the media stream, creating it on the first call.
-    ///
-    /// The stream is created empty; its source is set with `set_filename`
-    /// when a playback starts, so that no pipeline exists while nothing
-    /// plays.
-    fn media(&self) -> Option<gtk::MediaFile> {
-        let imp = self.imp();
-
-        if let Some(media) = &*imp.media.borrow() {
-            return Some(media.clone());
-        }
-
-        let media = gtk::MediaFile::new();
-
-        let obj = self.clone();
-        media.connect_prepared_notify(clone!(
-            #[weak]
-            obj,
-            move |media| {
-                let imp = obj.imp();
-
-                // The viewer was closed while the stream was being
-                // prepared, so the playback must not start.
-                if imp.closed.get() || !media.is_prepared() {
-                    return;
-                }
-
-                // The first frame replaces the low-resolution preview of
-                // the page, and the playback starts as soon as the stream
-                // is ready.
-                if let Some(page) = obj.imp().active_page.upgrade() {
-                    page.set_media_paintable(Some(media.upcast_ref()));
-                }
-
-                media.play();
-            }
-        ));
-        media.connect_error_notify(clone!(
-            #[weak]
-            obj,
-            move |media| {
-                let Some(error) = media.error() else {
-                    return;
-                };
-
-                log::warn!("Video playback failed: {error:?}");
-
-                // The playback can't continue, so the viewer is closed.
-                obj.stop_video();
-                obj.close();
-            }
-        ));
-
-        *imp.media.borrow_mut() = Some(media.clone());
-
-        Some(media)
+    /// The shared playback engine of the session this viewer belongs to.
+    fn playback_manager(&self) -> Option<playback_manager::PlaybackManager> {
+        self.ancestor(Session::static_type())
+            .and_downcast::<Session>()
+            .map(|session| session.playback_manager().clone())
     }
 
-    /// Plays the video at `path` on the given page, stopping the previous
-    /// playback.
+    /// Plays the video at `path`, taking the shared
+    /// playback stream of the session over from the previous playback.
     ///
     /// Animations loop and stay muted, while videos are played with sound.
-    fn play_video(&self, page: &MediaViewerPage, path: &glib::GString, is_animation: bool) {
+    fn play_video(&self, path: &glib::GString, is_animation: bool) {
         let imp = self.imp();
 
-        let Some(media) = self.media() else {
+        let Some(manager) = self.playback_manager() else {
             return;
         };
+        let media = manager.media_file();
 
-        // The pipeline of the previous source is freed by clearing the
-        // stream before the new source is loaded.
-        media.pause();
-        media.clear();
+        // The configuration applies to the upcoming source, which is
+        // loaded by the manager afterwards.
+        media.set_muted(is_animation);
+        // The looping state is always set anew, so that a looping playback
+        // doesn't leak into the next, non-looping one.
+        media.set_loop(is_animation);
 
         // The page keeps showing its preview until the stream is prepared,
         // so that it doesn't flash black.
         imp.controls.set_media_stream(Some(&media));
         imp.controls.set_visible(true);
 
-        // Swapping the source reconfigures the existing pipeline instead of
-        // creating a new one, so that at most one decoder exists in the
-        // viewer at any time.
-        media.set_muted(is_animation);
-        // The looping state is always set anew, so that a looping playback
-        // doesn't leak into the next, non-looping one.
-        media.set_loop(is_animation);
-        media.set_filename(Some(path.as_str()));
+        // When the stream is prepared, the first frame replaces the
+        // low-resolution preview of the active page and the playback
+        // starts.
+        manager.play_file(
+            path,
+            // Reset the UI when another playback takes over.
+            clone!(
+                #[weak(rename_to = obj)]
+                self,
+                move || {
+                    obj.imp().controls.set_media_stream(gtk::MediaStream::NONE);
+                    obj.imp().controls.set_visible(false);
+                }
+            ),
+            // The stream is ready to be displayed and played.
+            clone!(
+                #[weak(rename_to = obj)]
+                self,
+                move |media: &gtk::MediaFile| {
+                    let imp = obj.imp();
 
-        if media.is_prepared() {
-            // The stream was already prepared (e.g. the same source is
-            // reattached after a clear didn't change the file), so the
-            // `prepared` signal won't fire again. The page is notified
-            // directly instead.
-            page.set_media_paintable(Some(media.upcast_ref()));
-            media.play();
-        }
+                    // The viewer was closed while the stream was being
+                    // prepared, so the playback must not start.
+                    if imp.closed.get() {
+                        return;
+                    }
+
+                    if let Some(page) = imp.active_page.upgrade() {
+                        page.set_media_paintable(Some(media.upcast_ref()));
+                    }
+
+                    media.play();
+                }
+            ),
+            // The playback can't continue, so the viewer is closed.
+            clone!(
+                #[weak(rename_to = obj)]
+                self,
+                move || {
+                    obj.stop_video();
+                    obj.close();
+                }
+            ),
+        );
     }
 
-    /// Stops the playback and closes the media stream, freeing the
-    /// resources of the underlying pipeline.
+    /// Stops the playback and closes the shared media stream of the
+    /// session, freeing the resources of the underlying pipeline.
     ///
     /// Closing the stream is essential: merely pausing it would leave a
     /// full media pipeline behind, whose teardown happens synchronously on
@@ -1018,9 +994,8 @@ impl MediaViewer {
     fn stop_video(&self) {
         let imp = self.imp();
 
-        if let Some(media) = &*imp.media.borrow() {
-            media.pause();
-            media.clear();
+        if let Some(manager) = self.playback_manager() {
+            manager.stop();
         }
 
         imp.controls.set_media_stream(gtk::MediaStream::NONE);

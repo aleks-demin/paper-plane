@@ -1,4 +1,3 @@
-use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -15,22 +14,6 @@ use crate::ui::MessageBaseExt;
 use crate::ui::ViewerEntry;
 use crate::ui::ViewerItem;
 
-/// Computes the grid position of the tile at the given linear index.
-///
-/// An even-count layout is a uniform 2-column grid. An odd-count layout shows
-/// the first tile (the oldest message of the album) as a full-width tile on
-/// top of a 2-column grid with the remaining ones.
-fn grid_position(index: usize, layout_even: bool) -> (i32, i32, i32) {
-    if layout_even {
-        ((index % 2) as i32, (index / 2) as i32, 1)
-    } else if index == 0 {
-        (0, 0, 2)
-    } else {
-        let index = index - 1;
-        ((index % 2) as i32, (index / 2 + 1) as i32, 1)
-    }
-}
-
 mod imp {
     use super::*;
 
@@ -46,14 +29,10 @@ mod imp {
         /// update preserves in-progress downloads, image decoding and video
         /// playback state.
         pub(super) tiles: RefCell<HashMap<i64, glib::WeakRef<gtk::Widget>>>,
-        /// Whether the current layout is the even-count layout (uniform
-        /// 2-column grid), in contrast to the odd-count layout with a
-        /// full-width tile on top.
-        pub(super) layout_even: Cell<bool>,
         #[template_child]
         pub(super) message_bubble: TemplateChild<ui::MessageBubble>,
         #[template_child]
-        pub(super) grid: TemplateChild<gtk::Grid>,
+        pub(super) grid: TemplateChild<ui::MediaAlbumGrid>,
     }
 
     #[glib::object_subclass]
@@ -120,14 +99,13 @@ glib::wrapper! {
 /// The album is shown on behalf of its representative message (see
 /// `ChatHistoryModel`). The bubble shows the sender and the indicators of the
 /// representative as well as the last caption of the album, and the grid shows
-/// one tile per message.
+/// one tile per message, sized by its media aspect ratio.
 impl MessageMediaAlbum {
     /// Lays out the whole album from scratch.
     ///
-    /// The layout depends on the number of messages: an even number is laid
-    /// out as a uniform 2-column grid, while an odd number shows the oldest
-    /// message as a full-width tile on top of a 2-column grid with the
-    /// remaining ones.
+    /// The tiles are appended in message order; the grid positions and sizes
+    /// are computed by its layout manager from the aspect ratio of the media
+    /// of every tile.
     fn render_album(&self, album: &model::MediaAlbum) {
         let imp = self.imp();
         let grid = &*imp.grid;
@@ -138,21 +116,16 @@ impl MessageMediaAlbum {
         imp.tiles.borrow_mut().clear();
 
         let messages = album.messages();
-        let count = messages.len();
-        imp.layout_even.set(count.is_multiple_of(2));
 
-        if count == 0 {
+        if messages.is_empty() {
             return;
         }
 
         let session = messages[0].chat_().session_();
-        let layout_even = imp.layout_even.get();
 
-        for (index, message) in messages.iter().enumerate() {
-            let (column, row, width) = grid_position(index, layout_even);
-
+        for message in &messages {
             let tile = self.create_tile(&session, message);
-            grid.attach(&tile, column, row, width, 1);
+            grid.append(&tile);
             imp.tiles.borrow_mut().insert(message.id(), tile.downgrade());
         }
 
@@ -162,9 +135,9 @@ impl MessageMediaAlbum {
     /// Attaches tiles for the messages of the album that are not rendered
     /// yet, appending them at the end of the grid.
     ///
-    /// This must only be used when the layout didn't change and the new
-    /// messages were appended at the end of the album, so that the existing
-    /// tiles keep their positions.
+    /// This must only be used when the new messages were appended at the end
+    /// of the album, so that the existing tiles keep their order. The layout
+    /// adapts to the new tile count automatically.
     fn attach_new_tiles(&self, album: &model::MediaAlbum) {
         let imp = self.imp();
         let grid = &*imp.grid;
@@ -174,8 +147,6 @@ impl MessageMediaAlbum {
         };
         let session = first_message.chat_().session_();
 
-        let layout_even = imp.layout_even.get();
-
         for message in album.messages() {
             let mut tiles = imp.tiles.borrow_mut();
 
@@ -183,11 +154,8 @@ impl MessageMediaAlbum {
                 continue;
             }
 
-            let index = tiles.len();
-            let (column, row, width) = grid_position(index, layout_even);
-
             let tile = self.create_tile(&session, &message);
-            grid.attach(&tile, column, row, width, 1);
+            grid.append(&tile);
             tiles.insert(message.id(), tile.downgrade());
         }
 
@@ -262,13 +230,29 @@ impl MessageMediaAlbum {
                 continue;
             };
 
-            let index = entries.len();
             entries.push(ViewerEntry {
                 item,
                 message_id: message.id(),
             });
+        }
 
-            let Some(tile) = tile else {
+        // The tiles are assigned the whole album, so that the viewer can
+        // show the media around the clicked item. The index of a message
+        // within the viewable messages is looked up by its id.
+        for message in album.messages() {
+            let Some(tile) = imp
+                .tiles
+                .borrow()
+                .get(&message.id())
+                .and_then(|tile| tile.upgrade())
+            else {
+                continue;
+            };
+
+            let Some(index) = entries
+                .iter()
+                .position(|entry| entry.message_id == message.id())
+            else {
                 continue;
             };
 
@@ -312,11 +296,11 @@ impl MessageMediaAlbum {
 
                 let is_append = removed == 0 && position + added == store.n_items();
 
-                if is_append && obj.imp().layout_even.get() == album.len().is_multiple_of(2) {
+                if is_append {
                     obj.attach_new_tiles(&album);
                 } else {
-                    // The layout changed or tiles were removed, so the whole
-                    // grid must be laid out again.
+                    // Tiles were removed or reordered, so the whole grid must
+                    // be laid out again.
                     obj.render_album(&album);
                 }
             }

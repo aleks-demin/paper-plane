@@ -1,6 +1,8 @@
+use std::cell::Cell;
 use std::cell::RefCell;
 
 use glib::clone;
+use glib::Properties;
 use gtk::gdk;
 use gtk::glib;
 use gtk::prelude::*;
@@ -18,8 +20,13 @@ use super::FileStatus;
 mod imp {
     use super::*;
 
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, Properties)]
+    #[properties(wrapper_type = super::MediaPhotoTile)]
     pub(crate) struct MediaPhotoTile {
+        /// The aspect ratio (width over height) of the photo shown by this
+        /// tile, used by the album grid to compute the tile size.
+        #[property(get, default = 1.0)]
+        pub(super) aspect_ratio: Cell<f64>,
         pub(super) overlay: gtk::Overlay,
         pub(super) picture: super::super::MediaPicture,
         pub(super) download_button: super::super::MediaDownloadButton,
@@ -54,12 +61,26 @@ mod imp {
     }
 
     impl ObjectImpl for MediaPhotoTile {
+        fn properties() -> &'static [glib::ParamSpec] {
+            Self::derived_properties()
+        }
+
+        fn set_property(&self, id: usize, value: &glib::Value, pspec: &glib::ParamSpec) {
+            self.derived_set_property(id, value, pspec)
+        }
+
+        fn property(&self, id: usize, pspec: &glib::ParamSpec) -> glib::Value {
+            self.derived_property(id, pspec)
+        }
+
         fn constructed(&self) {
             self.parent_constructed();
 
             let obj = self.obj();
 
             obj.set_layout_manager(Some(gtk::BinLayout::new()));
+
+            self.aspect_ratio.set(1.0);
 
             self.picture.set_hexpand(true);
             self.picture.set_vexpand(true);
@@ -170,7 +191,12 @@ impl MediaPhotoTile {
             return;
         };
 
-        imp.picture.set_aspect_ratio(photo_size.width as f64 / photo_size.height as f64);
+        let aspect_ratio = photo_size.width as f64 / photo_size.height as f64;
+
+        imp.aspect_ratio.set(aspect_ratio);
+        self.notify("aspect-ratio");
+
+        imp.picture.set_aspect_ratio(aspect_ratio);
 
         imp.thumbnail.set_preview(photo.minithumbnail.as_ref());
         imp.thumbnail.set_thumbnail(None);

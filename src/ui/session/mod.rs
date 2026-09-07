@@ -1,10 +1,12 @@
 mod contacts_window;
 mod content;
+mod playback_manager;
 mod preferences_dialog;
 mod row;
 mod sidebar;
 mod switcher;
 
+use std::cell::OnceCell;
 use std::sync::OnceLock;
 
 use adw::prelude::*;
@@ -23,6 +25,7 @@ pub(crate) use self::content::ChatHistoryRow;
 pub(crate) use self::content::ChatInfoWindow;
 pub(crate) use self::content::Content;
 pub(crate) use self::content::EventRow;
+pub(crate) use self::content::MediaAlbumGrid;
 pub(crate) use self::content::MediaPhotoTile;
     pub(crate) use self::content::MediaPicture;
     pub(crate) use self::content::MediaThumbnail;
@@ -72,6 +75,8 @@ use crate::types::ChatId;
 use crate::ui;
 use crate::utils;
 
+use self::playback_manager::PlaybackManager;
+
 mod imp {
 
     use super::*;
@@ -88,6 +93,9 @@ mod imp {
         pub(super) content: TemplateChild<ui::Content>,
         #[template_child]
         pub(super) media_viewer: TemplateChild<ui::MediaViewer>,
+        /// The shared playback engine, owning the single media stream
+        /// used for playback across the session.
+        pub(super) playback_manager: OnceCell<PlaybackManager>,
     }
 
     #[glib::object_subclass]
@@ -192,6 +200,11 @@ impl From<&model::ClientStateSession> for Session {
 impl Session {
     pub(crate) fn model(&self) -> Option<model::ClientStateSession> {
         self.imp().model.upgrade()
+    }
+
+    /// The shared playback engine of the session.
+    pub(crate) fn playback_manager(&self) -> &PlaybackManager {
+        self.imp().playback_manager.get_or_init(PlaybackManager::new)
     }
 
     pub(crate) fn select_chat(&self, id: ChatId) {

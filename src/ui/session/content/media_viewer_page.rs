@@ -53,6 +53,12 @@ mod imp {
 
             let obj = self.obj();
 
+            // The carousel sizes a page to its natural width unless the page
+            // expands, which would let neighboring pages peek in from the
+            // sides while they show their low-resolution preview.
+            obj.set_hexpand(true);
+            obj.set_vexpand(true);
+
             obj.set_layout_manager(Some(gtk::BinLayout::new()));
 
             self.picture.set_hexpand(true);

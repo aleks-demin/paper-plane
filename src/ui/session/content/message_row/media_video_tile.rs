@@ -24,6 +24,10 @@ mod imp {
     #[derive(Debug, Default, Properties)]
     #[properties(wrapper_type = super::MediaVideoTile)]
     pub(crate) struct MediaVideoTile {
+        /// The aspect ratio (width over height) of the media shown by this
+        /// tile, used by the album grid to compute the tile size.
+        #[property(get, default = 1.0)]
+        pub(super) aspect_ratio: Cell<f64>,
         pub(super) overlay: gtk::Overlay,
         pub(super) picture: super::super::MediaPicture,
         pub(super) indicator: gtk::Label,
@@ -113,6 +117,8 @@ mod imp {
             let obj = self.obj();
 
             obj.set_layout_manager(Some(gtk::BinLayout::new()));
+
+            self.aspect_ratio.set(1.0);
 
             self.picture.set_hexpand(true);
             self.picture.set_vexpand(true);
@@ -274,6 +280,9 @@ impl MediaVideoTile {
         self.update_indicator();
 
         imp.picture.set_paintable(gdk::Paintable::NONE);
+
+        imp.aspect_ratio.set(aspect_ratio);
+        self.notify("aspect-ratio");
         imp.picture.set_aspect_ratio(aspect_ratio);
 
         imp.loader.bind(session, MediaType::Video, file);

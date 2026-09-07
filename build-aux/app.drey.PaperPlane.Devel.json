@@ -11,6 +11,7 @@
     "finish-args": [
         "--socket=fallback-x11",
         "--socket=wayland",
+        "--socket=pulseaudio",
         "--share=network",
         "--share=ipc",
         "--device=dri",
