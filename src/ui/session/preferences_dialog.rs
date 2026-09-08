@@ -206,30 +206,34 @@ impl PreferencesDialog {
             .build();
 
         // Media download settings handling
-        settings.bind(
-            "auto-download-media",
-            &*imp.auto_download_media_switch,
-            "active",
-        )
-        .build();
-        settings.bind(
-            "auto-download-photos",
-            &*imp.auto_download_photos_switch,
-            "active",
-        )
-        .build();
-        settings.bind(
-            "auto-download-videos",
-            &*imp.auto_download_videos_switch,
-            "active",
-        )
-        .build();
-        settings.bind(
-            "auto-download-files",
-            &*imp.auto_download_files_switch,
-            "active",
-        )
-        .build();
+        settings
+            .bind(
+                "auto-download-media",
+                &*imp.auto_download_media_switch,
+                "active",
+            )
+            .build();
+        settings
+            .bind(
+                "auto-download-photos",
+                &*imp.auto_download_photos_switch,
+                "active",
+            )
+            .build();
+        settings
+            .bind(
+                "auto-download-videos",
+                &*imp.auto_download_videos_switch,
+                "active",
+            )
+            .build();
+        settings
+            .bind(
+                "auto-download-files",
+                &*imp.auto_download_files_switch,
+                "active",
+            )
+            .build();
 
         // The maximum sizes are stored in bytes but shown in megabytes.
         // The adjustments are created in code because this version of the
@@ -244,41 +248,39 @@ impl PreferencesDialog {
 
         imp.auto_download_videos_max_size_spin
             .set_value(settings.uint("auto-download-videos-max-size") as f64 / MIB as f64);
-        imp.auto_download_videos_max_size_spin
-            .connect_notify_local(
-                Some("value"),
-                clone!(
-                    #[weak]
-                    settings,
-                    move |spin, _| {
-                        settings
-                            .set_uint(
-                                "auto-download-videos-max-size",
-                                (spin.value() * MIB as f64) as u32,
-                            )
-                            .unwrap();
-                    }
-                ),
-            );
+        imp.auto_download_videos_max_size_spin.connect_notify_local(
+            Some("value"),
+            clone!(
+                #[weak]
+                settings,
+                move |spin, _| {
+                    settings
+                        .set_uint(
+                            "auto-download-videos-max-size",
+                            (spin.value() * MIB as f64) as u32,
+                        )
+                        .unwrap();
+                }
+            ),
+        );
 
         imp.auto_download_files_max_size_spin
             .set_value(settings.uint("auto-download-files-max-size") as f64 / MIB as f64);
-        imp.auto_download_files_max_size_spin
-            .connect_notify_local(
-                Some("value"),
-                clone!(
-                    #[weak]
-                    settings,
-                    move |spin, _| {
-                        settings
-                            .set_uint(
-                                "auto-download-files-max-size",
-                                (spin.value() * MIB as f64) as u32,
-                            )
-                            .unwrap();
-                    }
-                ),
-            );
+        imp.auto_download_files_max_size_spin.connect_notify_local(
+            Some("value"),
+            clone!(
+                #[weak]
+                settings,
+                move |spin, _| {
+                    settings
+                        .set_uint(
+                            "auto-download-files-max-size",
+                            (spin.value() * MIB as f64) as u32,
+                        )
+                        .unwrap();
+                }
+            ),
+        );
 
         // Make the media rows insensitive when auto-downloading is disabled and
         // the maximum size rows also depend on their content type switches.

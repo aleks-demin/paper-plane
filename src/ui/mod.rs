@@ -24,6 +24,7 @@ pub(crate) use self::components::ScaleRevealer;
 pub(crate) use self::components::Snow;
 pub(crate) use self::components::Sticker;
 pub(crate) use self::components::Waveform;
+pub(crate) use self::components::WebmAnimation;
 pub(crate) use self::login::Code as LoginCode;
 pub(crate) use self::login::Login;
 pub(crate) use self::login::OtherDevice as LoginOtherDevice;

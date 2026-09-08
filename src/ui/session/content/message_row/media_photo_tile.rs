@@ -186,7 +186,8 @@ impl MediaPhotoTile {
         };
 
         // Choose the right photo size based on the screen scale factor.
-        let Some(photo_size) = utils::photo_size_for_scale_factor(&photo.sizes, self.scale_factor())
+        let Some(photo_size) =
+            utils::photo_size_for_scale_factor(&photo.sizes, self.scale_factor())
         else {
             return;
         };
@@ -201,7 +202,8 @@ impl MediaPhotoTile {
         imp.thumbnail.set_preview(photo.minithumbnail.as_ref());
         imp.thumbnail.set_thumbnail(None);
 
-        imp.loader.bind(session, MediaType::Photo, &photo_size.photo);
+        imp.loader
+            .bind(session, MediaType::Photo, &photo_size.photo);
 
         // Show a low-resolution preview of the photo while it is not
         // downloaded.
@@ -355,12 +357,7 @@ impl MediaPhotoTile {
 
         let handler_id = click.connect_released(f);
 
-        if let Some(handler_id) = self
-            .imp()
-            .click_handler_id
-            .borrow_mut()
-            .replace(handler_id)
-        {
+        if let Some(handler_id) = self.imp().click_handler_id.borrow_mut().replace(handler_id) {
             click.disconnect(handler_id);
         }
     }

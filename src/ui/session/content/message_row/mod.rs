@@ -1,3 +1,4 @@
+mod album_layout;
 mod base;
 mod bubble;
 mod document;
@@ -5,7 +6,6 @@ mod file_status;
 mod indicators;
 mod label;
 mod location;
-mod album_layout;
 mod media_album;
 mod media_album_grid;
 mod media_album_layout;
@@ -420,9 +420,20 @@ impl Row {
                         self.update_specific_content::<_, ui::MessageVideo>(message_);
                     }
                     MessageAnimatedEmoji(data)
-                        if data.animated_emoji.sticker.clone().map(
-                            |s| matches!(s.format, tdlib::enums::StickerFormat::Webp | tdlib::enums::StickerFormat::Tgs)
-                        ).unwrap_or_default() => {
+                        if data
+                            .animated_emoji
+                            .sticker
+                            .clone()
+                            .map(|s| {
+                                matches!(
+                                    s.format,
+                                    tdlib::enums::StickerFormat::Webp
+                                        | tdlib::enums::StickerFormat::Tgs
+                                        | tdlib::enums::StickerFormat::Webm
+                                )
+                            })
+                            .unwrap_or_default() =>
+                    {
                         self.update_specific_content::<_, ui::MessageSticker>(message_);
                     }
                     MessageLocation(_) => {
@@ -432,7 +443,12 @@ impl Row {
                         self.update_specific_content::<_, ui::MessagePhoto>(message_);
                     }
                     MessageSticker(data)
-                        if matches!(data.sticker.format, tdlib::enums::StickerFormat::Webp | tdlib::enums::StickerFormat::Tgs) =>
+                        if matches!(
+                            data.sticker.format,
+                            tdlib::enums::StickerFormat::Webp
+                                | tdlib::enums::StickerFormat::Tgs
+                                | tdlib::enums::StickerFormat::Webm
+                        ) =>
                     {
                         self.update_specific_content::<_, ui::MessageSticker>(message_);
                     }

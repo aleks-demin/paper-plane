@@ -224,11 +224,7 @@ fn children_sizes(children: &[(gtk::Widget, PhysicalSize)]) -> Vec<PhysicalSize>
 }
 
 /// The height of the album grid laid out at the given width.
-fn layout_height(
-    children: &[(gtk::Widget, PhysicalSize)],
-    width: f64,
-    spacing: f64,
-) -> i32 {
+fn layout_height(children: &[(gtk::Widget, PhysicalSize)], width: f64, spacing: f64) -> i32 {
     let rects = album_layout::calculate_album_grid(&children_sizes(children), width, spacing);
     max_height(&rects).round() as i32
 }
@@ -244,9 +240,7 @@ fn max_height(rects: &[album_layout::Rect]) -> f64 {
 fn is_rtl(widget: &gtk::Widget) -> bool {
     match widget.direction() {
         gtk::TextDirection::Rtl => true,
-        gtk::TextDirection::None => {
-            gtk::Widget::default_direction() == gtk::TextDirection::Rtl
-        }
+        gtk::TextDirection::None => gtk::Widget::default_direction() == gtk::TextDirection::Rtl,
         _ => false,
     }
 }

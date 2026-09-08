@@ -496,9 +496,7 @@ impl ChatHistory {
         let Some(no_selection) = selection.downcast_ref::<gtk::NoSelection>() else {
             return 0;
         };
-        let Some(flatten_model) = no_selection
-            .model()
-            .and_downcast::<gtk::FlattenListModel>()
+        let Some(flatten_model) = no_selection.model().and_downcast::<gtk::FlattenListModel>()
         else {
             return 0;
         };
@@ -620,15 +618,11 @@ impl ChatHistory {
                                         log::debug!(
                                             "load_older_messages already in flight (limit = {limit}), retrying"
                                         );
-                                        glib::timeout_future(std::time::Duration::from_millis(
-                                            20,
-                                        ))
-                                        .await;
+                                        glib::timeout_future(std::time::Duration::from_millis(20))
+                                            .await;
                                     }
                                     Err(model::ChatHistoryError::Tdlib(e)) => {
-                                        log::warn!(
-                                            "Couldn't load initial history messages: {e:?}"
-                                        );
+                                        log::warn!("Couldn't load initial history messages: {e:?}");
                                         break;
                                     }
                                 }
@@ -646,10 +640,7 @@ impl ChatHistory {
                             log::debug!("Loading messages around the anchor");
                             obj.load_around_anchor(&model).await;
 
-                            log::debug!(
-                                "Anchor window loaded (n_items = {})",
-                                model.n_items(),
-                            );
+                            log::debug!("Anchor window loaded (n_items = {})", model.n_items(),);
 
                             obj.set_sticky(false);
                         }
@@ -726,10 +717,7 @@ impl ChatHistory {
         // The history is anchored at the last read message when there are
         // unread messages. A chat that was never read has no such anchor and
         // jumping to the newest message is used instead.
-        if chat.unread_count() > 0
-            && chat.last_read_inbox_message_id() != 0
-            && !model.at_newest()
-        {
+        if chat.unread_count() > 0 && chat.last_read_inbox_message_id() != 0 && !model.at_newest() {
             self.jump_to_first_unread();
         } else if !model.at_newest() {
             self.go_to_newest();

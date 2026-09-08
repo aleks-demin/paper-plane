@@ -13,6 +13,7 @@ mod scale_revealer;
 mod snow;
 mod sticker;
 mod waveform;
+mod webm_animation;
 
 pub(crate) use self::animated_bin::AnimatedBin;
 pub(crate) use self::avatar::Avatar;
@@ -29,3 +30,4 @@ pub(crate) use self::scale_revealer::ScaleRevealer;
 pub(crate) use self::snow::Snow;
 pub(crate) use self::sticker::Sticker;
 pub(crate) use self::waveform::Waveform;
+pub(crate) use self::webm_animation::WebmAnimation;

@@ -200,12 +200,10 @@ impl MessageVoiceNote {
                 let voice_note = td_message.voice_note;
 
                 imp.waveform.set_waveform(&voice_note.waveform);
-                imp.duration_label.set_text(&format_duration(
-                    voice_note.duration,
-                ));
-                imp.message_bubble.set_label(utils::parse_formatted_text(
-                    td_message.caption,
-                ));
+                imp.duration_label
+                    .set_text(&format_duration(voice_note.duration));
+                imp.message_bubble
+                    .set_label(utils::parse_formatted_text(td_message.caption));
 
                 imp.play_when_downloaded.set(false);
                 imp.loader.bind(
@@ -390,7 +388,8 @@ impl MessageVoiceNote {
 
         self.disconnect_progress_handlers();
 
-        imp.play_image.set_icon_name(Some("media-playback-start-symbolic"));
+        imp.play_image
+            .set_icon_name(Some("media-playback-start-symbolic"));
         imp.waveform.set_progress(0.0);
     }
 

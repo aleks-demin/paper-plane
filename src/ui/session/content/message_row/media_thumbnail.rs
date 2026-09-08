@@ -1,12 +1,12 @@
 use std::cell::{Cell, RefCell};
 
 use glib::clone;
-use gtk::CompositeTemplate;
 use gtk::gdk;
 use gtk::gio;
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
+use gtk::CompositeTemplate;
 
 use crate::model;
 use crate::model::MediaType;
@@ -30,7 +30,9 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/app/drey/paper-plane/ui/session/content/message_row/media_thumbnail.ui")]
+    #[template(
+        resource = "/app/drey/paper-plane/ui/session/content/message_row/media_thumbnail.ui"
+    )]
     pub(crate) struct MediaThumbnail {
         /// The picture rendering the preview.
         #[template_child]
@@ -170,11 +172,9 @@ impl MediaThumbnail {
             #[weak(rename_to = obj)]
             self,
             async move {
-                let result = gio::spawn_blocking(move || {
-                    utils::decode_image_from_path(&path)
-                })
-                .await
-                .unwrap();
+                let result = gio::spawn_blocking(move || utils::decode_image_from_path(&path))
+                    .await
+                    .unwrap();
 
                 if obj.imp().generation.get() != generation {
                     return;
@@ -215,11 +215,9 @@ impl MediaThumbnail {
             #[weak(rename_to = obj)]
             self,
             async move {
-                let result = gio::spawn_blocking(move || {
-                    utils::decode_image_from_path(&path)
-                })
-                .await
-                .unwrap();
+                let result = gio::spawn_blocking(move || utils::decode_image_from_path(&path))
+                    .await
+                    .unwrap();
 
                 if obj.imp().generation.get() != generation {
                     return;
@@ -300,11 +298,9 @@ impl MediaThumbnail {
                         return;
                     };
 
-                    let result = gio::spawn_blocking(move || {
-                        utils::decode_image_from_path(&path)
-                    })
-                    .await
-                    .unwrap();
+                    let result = gio::spawn_blocking(move || utils::decode_image_from_path(&path))
+                        .await
+                        .unwrap();
 
                     if obj.imp().generation.get() != generation {
                         return;

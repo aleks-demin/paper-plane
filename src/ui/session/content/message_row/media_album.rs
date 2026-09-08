@@ -2,11 +2,11 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+use glib::clone;
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::CompositeTemplate;
-use glib::clone;
 
 use crate::model;
 use crate::ui;
@@ -126,7 +126,9 @@ impl MessageMediaAlbum {
         for message in &messages {
             let tile = self.create_tile(&session, message);
             grid.append(&tile);
-            imp.tiles.borrow_mut().insert(message.id(), tile.downgrade());
+            imp.tiles
+                .borrow_mut()
+                .insert(message.id(), tile.downgrade());
         }
 
         self.update_viewer_contexts(album);

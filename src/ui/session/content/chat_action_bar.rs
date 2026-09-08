@@ -584,9 +584,10 @@ impl ChatActionBar {
                 };
 
                 // Send the message
-                let result =
-                    tdlib::functions::send_message(chat_id, None, reply_to, None, message, client_id)
-                        .await;
+                let result = tdlib::functions::send_message(
+                    chat_id, None, reply_to, None, message, client_id,
+                )
+                .await;
                 if let Err(e) = result {
                     log::warn!("Error sending a message: {:?}", e);
                 }

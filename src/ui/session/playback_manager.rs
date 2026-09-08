@@ -197,10 +197,12 @@ impl PlaybackManager {
     /// ideally right before or right after `play_file`, so that its
     /// connection doesn't get disconnected by a subsequent call.
     pub(crate) fn connect_playing<F: Fn(&gtk::MediaFile) + 'static>(&self, on_playing: F) {
-        let id = self.0.media_file.connect_notify_local(
-            Some("playing"),
-            move |media: &gtk::MediaFile, _| on_playing(media),
-        );
+        let id = self
+            .0
+            .media_file
+            .connect_notify_local(Some("playing"), move |media: &gtk::MediaFile, _| {
+                on_playing(media)
+            });
         self.0.playing_handlers.borrow_mut().push(id);
     }
 

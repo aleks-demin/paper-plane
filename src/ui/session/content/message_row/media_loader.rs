@@ -125,7 +125,10 @@ impl MediaLoader {
             FileStatus::Downloading(_) | FileStatus::CanBeDownloaded => {
                 let size = imp.size.get();
 
-                if session.media_manager().should_auto_download(media_type, size) {
+                if session
+                    .media_manager()
+                    .should_auto_download(media_type, size)
+                {
                     imp.auto_download_pending.set(true);
                 }
 
@@ -165,7 +168,9 @@ impl MediaLoader {
         let imp = self.imp();
 
         if let Some(session) = imp.session.upgrade() {
-            session.media_manager().cancel_download_file(imp.file_id.get());
+            session
+                .media_manager()
+                .cancel_download_file(imp.file_id.get());
         }
 
         self.set_status(FileStatus::CanBeDownloaded);

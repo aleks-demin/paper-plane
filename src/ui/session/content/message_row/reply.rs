@@ -196,8 +196,11 @@ impl MessageReply {
             return;
         }
 
-        self.activate_action("chat-history.jump-to-message", Some(&message_id.to_variant()))
-            .unwrap();
+        self.activate_action(
+            "chat-history.jump-to-message",
+            Some(&message_id.to_variant()),
+        )
+        .unwrap();
     }
 
     fn update_from_message(&self, replied_message: &model::Message, is_outgoing: bool) {

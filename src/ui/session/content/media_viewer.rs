@@ -6,16 +6,16 @@ use adw::subclass::prelude::*;
 use glib::clone;
 use gtk::gdk;
 use gtk::glib;
-use gtk::CompositeTemplate;
 use gtk::graphene;
+use gtk::CompositeTemplate;
 
 use crate::model;
 use crate::types::MessageId;
 use crate::ui::{ScaleRevealer, Session};
 use crate::utils;
 
-use super::media_viewer_page::MediaViewerPage;
 use super::super::playback_manager;
+use super::media_viewer_page::MediaViewerPage;
 
 /// The number of media messages requested per search when older media is
 /// loaded.
@@ -385,8 +385,7 @@ mod imp {
 
             if progress > 0.0 {
                 let background_color = gdk::RGBA::new(0.0, 0.0, 0.0, progress as f32);
-                let bounds =
-                    graphene::Rect::new(0.0, 0.0, obj.width() as f32, obj.height() as f32);
+                let bounds = graphene::Rect::new(0.0, 0.0, obj.width() as f32, obj.height() as f32);
                 snapshot.append_color(&background_color, &bounds);
             }
 
@@ -485,29 +484,16 @@ impl MediaViewer {
         imp.session.set(Some(&session));
         imp.chat.set(Some(chat));
 
-        let anchor_newest_id = entries
-            .iter()
-            .map(|entry| entry.message_id)
-            .max()
-            .unwrap();
+        let anchor_newest_id = entries.iter().map(|entry| entry.message_id).max().unwrap();
         let prefix = collect_newer_entries(chat, anchor_newest_id);
         let index = index.min(entries.len() - 1);
 
-        let anchor_oldest_id = entries
-            .iter()
-            .map(|entry| entry.message_id)
-            .min()
-            .unwrap();
+        let anchor_oldest_id = entries.iter().map(|entry| entry.message_id).min().unwrap();
         imp.oldest_message_id.set(anchor_oldest_id);
         imp.next_older_id.set(anchor_oldest_id);
         imp.has_more.set(true);
 
-        let recycled: Vec<MediaViewerPage> = imp
-            .pages
-            .borrow_mut()
-            .drain(..)
-            .flatten()
-            .collect();
+        let recycled: Vec<MediaViewerPage> = imp.pages.borrow_mut().drain(..).flatten().collect();
         for page in recycled {
             page.deactivate();
             imp.carousel.remove(&page);
@@ -709,13 +695,7 @@ impl MediaViewer {
             return;
         }
 
-        let Some(page) = imp
-            .pages
-            .borrow()
-            .get(index as usize)
-            .cloned()
-            .flatten()
-        else {
+        let Some(page) = imp.pages.borrow().get(index as usize).cloned().flatten() else {
             return;
         };
 

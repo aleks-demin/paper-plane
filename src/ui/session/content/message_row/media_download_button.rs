@@ -9,7 +9,9 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/app/drey/paper-plane/ui/session/content/message_row/media_download_button.ui")]
+    #[template(
+        resource = "/app/drey/paper-plane/ui/session/content/message_row/media_download_button.ui"
+    )]
     pub(crate) struct MediaDownloadButton {
         #[template_child]
         pub(super) download_image: TemplateChild<gtk::Image>,

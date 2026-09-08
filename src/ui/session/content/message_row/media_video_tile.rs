@@ -82,8 +82,7 @@ mod imp {
         /// with their connected signal handler ids, used for tracking the
         /// visibility on screen. It is only set while this widget is mapped.
         /// The vertical adjustment comes first.
-        pub(super) adjustment_handlers:
-            RefCell<Vec<(gtk::Adjustment, glib::SignalHandlerId)>>,
+        pub(super) adjustment_handlers: RefCell<Vec<(gtk::Adjustment, glib::SignalHandlerId)>>,
         /// The list view showing this widget, used as a coordinate space
         /// for computing the visibility on screen.
         pub(super) list_view: glib::WeakRef<gtk::ListView>,
@@ -329,7 +328,8 @@ impl MediaVideoTile {
                 let manual = !imp.loader.is_auto();
 
                 imp.download_button.set_visible(manual);
-                imp.download_button.set_status(FileStatus::Downloading(progress));
+                imp.download_button
+                    .set_status(FileStatus::Downloading(progress));
 
                 if manual {
                     // Clicking again cancels the download.

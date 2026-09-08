@@ -27,12 +27,10 @@ pub(crate) use self::content::Content;
 pub(crate) use self::content::EventRow;
 pub(crate) use self::content::MediaAlbumGrid;
 pub(crate) use self::content::MediaPhotoTile;
-    pub(crate) use self::content::MediaPicture;
-    pub(crate) use self::content::MediaThumbnail;
-    pub(crate) use self::content::MediaVideoTile;
+pub(crate) use self::content::MediaPicture;
+pub(crate) use self::content::MediaThumbnail;
+pub(crate) use self::content::MediaVideoTile;
 pub(crate) use self::content::MediaViewer;
-pub(crate) use self::content::ViewerEntry;
-pub(crate) use self::content::ViewerItem;
 pub(crate) use self::content::MessageBase;
 pub(crate) use self::content::MessageBaseExt;
 pub(crate) use self::content::MessageBaseImpl;
@@ -49,9 +47,11 @@ pub(crate) use self::content::MessageRow;
 pub(crate) use self::content::MessageSticker;
 pub(crate) use self::content::MessageText;
 pub(crate) use self::content::MessageVenue;
-pub(crate) use self::content::MessageVoiceNote;
 pub(crate) use self::content::MessageVideo;
+pub(crate) use self::content::MessageVoiceNote;
 pub(crate) use self::content::SendMediaWindow;
+pub(crate) use self::content::ViewerEntry;
+pub(crate) use self::content::ViewerItem;
 pub(crate) use self::preferences_dialog::PreferencesDialog;
 pub(crate) use self::row::Row;
 pub(crate) use self::sidebar::Avatar as SidebarAvatar;
@@ -205,7 +205,9 @@ impl Session {
 
     /// The shared playback engine of the session.
     pub(crate) fn playback_manager(&self) -> &PlaybackManager {
-        self.imp().playback_manager.get_or_init(PlaybackManager::new)
+        self.imp()
+            .playback_manager
+            .get_or_init(PlaybackManager::new)
     }
 
     pub(crate) fn select_chat(&self, id: ChatId) {

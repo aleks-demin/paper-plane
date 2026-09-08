@@ -198,8 +198,7 @@ impl MediaViewerPage {
 
         match &*imp.item.borrow() {
             Some(ViewerItem::Photo { .. }) => {
-                imp.picture
-                    .set_paintable(imp.placeholder.borrow().as_ref());
+                imp.picture.set_paintable(imp.placeholder.borrow().as_ref());
 
                 self.maybe_decode_photo();
             }
@@ -327,9 +326,7 @@ impl MediaViewerPage {
 
                 match &*imp.item.borrow() {
                     Some(ViewerItem::Photo { .. }) => self.maybe_decode_photo(),
-                    Some(ViewerItem::Video { .. }) if imp.displayed.get() => {
-                        self.start_playback()
-                    }
+                    Some(ViewerItem::Video { .. }) if imp.displayed.get() => self.start_playback(),
                     Some(ViewerItem::Video { .. }) => {}
                     None => {}
                 }
@@ -375,10 +372,9 @@ impl MediaViewerPage {
             #[weak(rename_to = obj)]
             self,
             async move {
-                let result =
-                    gio::spawn_blocking(move || utils::decode_image_from_path(&path))
-                        .await
-                        .unwrap();
+                let result = gio::spawn_blocking(move || utils::decode_image_from_path(&path))
+                    .await
+                    .unwrap();
 
                 if obj.imp().generation.get() != generation {
                     return;

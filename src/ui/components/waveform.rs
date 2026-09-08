@@ -35,7 +35,9 @@ mod imp {
             static PROPERTIES: OnceLock<Vec<glib::ParamSpec>> = OnceLock::new();
             PROPERTIES.get_or_init(|| {
                 vec![
-                    glib::ParamSpecString::builder("waveform").explicit_notify().build(),
+                    glib::ParamSpecString::builder("waveform")
+                        .explicit_notify()
+                        .build(),
                     glib::ParamSpecDouble::builder("progress")
                         .maximum(1.0)
                         .explicit_notify()
@@ -191,7 +193,6 @@ impl Waveform {
             self.notify("progress");
         }
     }
-
 }
 
 /// Decodes the waveform of a voice note. TDLib provides it as a string where
