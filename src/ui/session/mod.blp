@@ -1,6 +1,7 @@
 using Gtk 4.0;
 using Adw 1;
 
+
 template $Session : Adw.Bin {
   child: Gtk.Overlay {
     Adw.BreakpointBin {
@@ -17,7 +18,7 @@ template $Session : Adw.Bin {
 
           child: $PaplSidebar sidebar {
             compact: bind split_view.collapsed;
-            selected-chat: bind-property content.chat bidirectional;
+            selected-chat: bind content.chat bidirectional;
             session: bind template.model;
           };
         };

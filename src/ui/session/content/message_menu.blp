@@ -3,6 +3,12 @@ using Gtk 4.0;
 menu model {
   section {
     item {
+      label: _("_React");
+      action: "message-row.react-menu";
+      hidden-when: "action-disabled";
+    }
+
+    item {
       label: _("_Reply");
       action: "message-row.reply";
       hidden-when: "action-disabled";

@@ -13,7 +13,7 @@ use crate::model;
 use crate::ui;
 use crate::utils;
 
-const MAX_WIDTH: i32 = 400;
+const MAX_WIDTH: i32 = 510;
 const SENDER_COLOR_CLASSES: &[&str] = &[
     "sender-text-red",
     "sender-text-orange",
@@ -48,6 +48,8 @@ mod imp {
         pub(super) indicators: TemplateChild<ui::MessageIndicators>,
         #[template_child]
         pub(super) suffix_bin: TemplateChild<adw::Bin>,
+        #[template_child]
+        pub(super) reactions: TemplateChild<ui::MessageReactions>,
     }
 
     #[glib::object_subclass]
@@ -137,6 +139,7 @@ impl MessageBubble {
         let imp = self.imp();
 
         imp.indicators.set_message(message.upcast_ref());
+        imp.reactions.set_message(message.clone().upcast());
 
         let is_channel = if let model::ChatType::Supergroup(data) = message.chat_().chat_type() {
             data.is_channel()

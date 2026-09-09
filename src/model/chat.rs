@@ -131,6 +131,8 @@ mod imp {
         pub(super) actions: OnceCell<model::ChatActionList>,
         #[property(get)]
         pub(super) permissions: RefCell<model::BoxedChatPermissions>,
+        #[property(get)]
+        pub(super) available_reactions: RefCell<model::BoxedChatAvailableReactions>,
     }
 
     #[glib::object_subclass]
@@ -214,6 +216,8 @@ impl Chat {
             ));
         imp.permissions
             .replace(model::BoxedChatPermissions(td_chat.permissions));
+        imp.available_reactions
+            .replace(model::BoxedChatAvailableReactions(td_chat.available_reactions));
 
         obj
     }
@@ -248,6 +252,9 @@ impl Chat {
             ChatPermissions(update) => {
                 self.set_permissions(model::BoxedChatPermissions(update.permissions))
             }
+            ChatAvailableReactions(update) => self.set_available_reactions(
+                model::BoxedChatAvailableReactions(update.available_reactions),
+            ),
             ChatPhoto(update) => self.set_avatar(update.photo.map(Into::into)),
             ChatReadInbox(update) => {
                 self.set_last_read_inbox_message_id(update.last_read_inbox_message_id);
@@ -448,6 +455,26 @@ impl Chat {
         }
         self.imp().permissions.replace(permissions);
         self.notify_permissions();
+    }
+
+    fn set_available_reactions(&self, available_reactions: model::BoxedChatAvailableReactions) {
+        if self.available_reactions().0 == available_reactions.0 {
+            return;
+        }
+        self.imp().available_reactions.replace(available_reactions);
+        self.notify_available_reactions();
+    }
+
+    /// Returns whether reactions can be sent in this chat, according to the
+    /// chat's settings.
+    pub(crate) fn can_react(&self) -> bool {
+        match &self.available_reactions().0 {
+            tdlib::enums::ChatAvailableReactions::All(_) => true,
+            tdlib::enums::ChatAvailableReactions::Some(data) => data
+                .reactions
+                .iter()
+                .any(|reaction| matches!(reaction, tdlib::enums::ReactionType::Emoji(_))),
+        }
     }
 
     pub(crate) fn connect_new_message<F: Fn(&Self, model::Message) + 'static>(

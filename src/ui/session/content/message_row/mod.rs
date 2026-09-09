@@ -16,6 +16,8 @@ mod media_picture;
 mod media_thumbnail;
 mod media_video_tile;
 mod photo;
+mod reactions;
+mod reactions_chooser;
 mod reply;
 mod sticker;
 mod text;
@@ -53,6 +55,8 @@ pub(crate) use self::media_picture::MediaPicture;
 pub(crate) use self::media_thumbnail::MediaThumbnail;
 pub(crate) use self::media_video_tile::MediaVideoTile;
 pub(crate) use self::photo::MessagePhoto;
+pub(crate) use self::reactions::MessageReactions;
+pub(crate) use self::reactions_chooser::ReactionsChooser;
 pub(crate) use self::reply::MessageReply;
 pub(crate) use self::sticker::MessageSticker;
 pub(crate) use self::text::MessageText;
@@ -80,6 +84,10 @@ mod imp {
         /// message, which are used to update the actions when the properties
         /// are fetched lazily.
         pub(super) properties_handler_ids: RefCell<Vec<glib::SignalHandlerId>>,
+        /// The signal handler id of the `available-reactions` property of the
+        /// current message's chat, which is used to update the actions when
+        /// the chat's reaction settings change.
+        pub(super) chat_properties_handler_id: RefCell<Option<glib::SignalHandlerId>>,
     }
 
     #[glib::object_subclass]
@@ -101,6 +109,9 @@ mod imp {
             });
             klass.install_action("message-row.delete", None, move |widget, _, _| {
                 widget.show_delete_dialog(false)
+            });
+            klass.install_action("message-row.react-menu", None, move |widget, _, _| {
+                widget.show_reactions_chooser()
             });
         }
 
@@ -185,6 +196,46 @@ impl Row {
             self.activate_action("chat-history.edit", Some(&message.id().to_variant()))
                 .unwrap();
         }
+    }
+
+    fn show_reactions_chooser(&self) {
+        let Ok(message) = self.message().downcast::<model::Message>() else {
+            return;
+        };
+
+        utils::spawn(clone!(
+            #[weak(rename_to = obj)]
+            self,
+            async move {
+                let reactions = match message.available_reactions().await {
+                    Ok(reactions) => reactions,
+                    Err(e) => {
+                        log::debug!("Error getting available message reactions: {e:?}");
+                        return;
+                    }
+                };
+
+                let emoji_reactions: Vec<_> = reactions
+                    .into_iter()
+                    .filter(|reaction| {
+                        matches!(
+                            reaction.r#type,
+                            tdlib::enums::ReactionType::Emoji(_)
+                        )
+                    })
+                    .collect();
+
+                if emoji_reactions.is_empty() {
+                    return;
+                }
+
+                let chooser = ui::ReactionsChooser::new(&message);
+                chooser.set_reactions(emoji_reactions);
+                chooser.set_parent(&obj);
+                chooser.connect_closed(|chooser| chooser.unparent());
+                chooser.popup();
+            }
+        ));
     }
 
     fn show_delete_dialog(&self, revoke: bool) {
@@ -314,6 +365,11 @@ impl Row {
         // Disconnect the properties handlers of the previous message
         let previous = imp.message.replace(Some(message));
         if let Some(previous) = previous {
+            if let Some(handler_id) = imp.chat_properties_handler_id.take() {
+                if let Some(previous_message) = previous.downcast_ref::<model::Message>() {
+                    previous_message.chat_().disconnect(handler_id);
+                }
+            }
             for handler_id in imp.properties_handler_ids.borrow_mut().drain(..) {
                 previous.disconnect(handler_id);
             }
@@ -343,6 +399,18 @@ impl Row {
                 );
                 imp.properties_handler_ids.borrow_mut().push(handler_id);
             }
+
+            // Reactions availability is a chat-level setting. Update the
+            // actions whenever the chat's `available-reactions` changes.
+            let handler_id = message.chat_().connect_notify_local(
+                Some("available-reactions"),
+                move |_, _| {
+                    if let Some(obj) = obj_weak.upgrade() {
+                        obj.update_actions();
+                    }
+                },
+            );
+            imp.chat_properties_handler_id.replace(Some(handler_id));
         }
 
         self.update_actions();
@@ -397,6 +465,12 @@ impl Row {
         } else {
             self.action_set_enabled("message-row.delete", false);
             self.action_set_enabled("message-row.revoke-delete", false);
+        }
+
+        if let Some(message) = self.message().downcast_ref::<model::Message>() {
+            self.action_set_enabled("message-row.react-menu", message.chat_().can_react());
+        } else {
+            self.action_set_enabled("message-row.react-menu", false);
         }
     }
 

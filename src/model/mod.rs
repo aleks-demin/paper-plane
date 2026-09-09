@@ -83,6 +83,7 @@ pub(crate) use self::message::Message;
 pub(crate) use self::message::MessageSender;
 pub(crate) use self::message_forward_info::MessageForwardInfo;
 pub(crate) use self::message_forward_info::MessageForwardOrigin;
+pub(crate) use self::message_interaction_info::BoxedMessageReactions;
 pub(crate) use self::message_interaction_info::MessageInteractionInfo;
 pub(crate) use self::media_manager::MediaManager;
 pub(crate) use self::media_manager::MediaType;
@@ -161,6 +162,20 @@ pub(crate) struct BoxedChatNotificationSettings(pub(crate) ChatNotificationSetti
 #[derive(Clone, Debug, Default, PartialEq, glib::Boxed)]
 #[boxed_type(name = "BoxedChatPermissions")]
 pub(crate) struct BoxedChatPermissions(pub(crate) ChatPermissions);
+
+#[derive(Clone, Debug, PartialEq, glib::Boxed)]
+#[boxed_type(name = "BoxedChatAvailableReactions")]
+pub(crate) struct BoxedChatAvailableReactions(pub(crate) tdlib::enums::ChatAvailableReactions);
+
+impl Default for BoxedChatAvailableReactions {
+    fn default() -> Self {
+        // Only used for `Default` bounds of property storage; real chats
+        // always get their actual value in `Chat::new`.
+        Self(tdlib::enums::ChatAvailableReactions::All(
+            Default::default(),
+        ))
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, glib::Boxed)]
 #[boxed_type(name = "BoxedDraftMessage", nullable)]

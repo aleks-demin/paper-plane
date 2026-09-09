@@ -1,6 +1,7 @@
 using Gtk 4.0;
 using Adw 1;
 
+
 template $PaplLoginPhoneNumber {
   layout-manager: BinLayout { };
 
@@ -15,7 +16,7 @@ template $PaplLoginPhoneNumber {
       Button exit_button {
         action-name: "login.phone-number.exit";
         icon-name: "go-previous-symbolic";
-        visible: bind-property exit_button.sensitive;
+        visible: bind exit_button.sensitive;
       }
     }
 

@@ -1,6 +1,7 @@
 using Gtk 4.0;
 using Adw 1;
 
+
 template $PaplMessageBubble {
   Box box_ {
     orientation: vertical;
@@ -35,6 +36,10 @@ template $PaplMessageBubble {
     }
 
     $PaplMessageLabel message_label {
+      visible: false;
+    }
+
+    $PaplMessageReactions reactions {
       visible: false;
     }
   }

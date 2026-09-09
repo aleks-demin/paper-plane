@@ -44,6 +44,7 @@
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/media_thumbnail.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/mod.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/photo.ui</file>
+    <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/reactions.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/reply.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/sticker.ui</file>
     <file compressed="true" preprocess="xml-stripblanks">session/content/message_row/text.ui</file>

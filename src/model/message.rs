@@ -227,6 +227,37 @@ impl Message {
         ));
     }
 
+    /// Fetches the reactions that can be added to this message from TDLib.
+    ///
+    /// The list contains the top reactions followed by the recent ones,
+    /// deduplicated by reaction type.
+    pub(crate) async fn available_reactions(
+        &self,
+    ) -> Result<Vec<tdlib::types::AvailableReaction>, tdlib::types::Error> {
+        let chat = self.chat_();
+        let reactions = tdlib::functions::get_message_available_reactions(
+            chat.id(),
+            self.id(),
+            8,
+            chat.session_().client_().id(),
+        )
+        .await?;
+
+        let tdlib::enums::AvailableReactions::AvailableReactions(data) = reactions;
+
+        let mut result: Vec<tdlib::types::AvailableReaction> = Vec::new();
+        for reaction in data.top_reactions.into_iter().chain(data.recent_reactions) {
+            if !result
+                .iter()
+                .any(|existing| existing.r#type == reaction.r#type)
+            {
+                result.push(reaction);
+            }
+        }
+
+        Ok(result)
+    }
+
     pub(crate) fn handle_update(&self, update: tdlib::enums::Update) {
         use tdlib::enums::Update::*;
 
@@ -250,6 +281,62 @@ impl Message {
             chat.session_().client_().id(),
         )
         .await
+    }
+
+    /// Adds a reaction with the given emoji to this message, or removes it if
+    /// the current user already chose it.
+    pub(crate) fn toggle_reaction(&self, emoji: &str) {
+        let is_chosen = self
+            .interaction_info()
+            .reactions()
+            .0
+            .iter()
+            .any(|reaction| {
+                reaction.is_chosen
+                    && matches!(&reaction.r#type,
+                        tdlib::enums::ReactionType::Emoji(r)
+                            if r.emoji == emoji)
+            });
+
+        let emoji_owned = emoji.to_string();
+
+        utils::spawn(clone!(
+            #[weak(rename_to = obj)]
+            self,
+            async move {
+                let emoji = emoji_owned;
+                let chat = obj.chat_();
+                let client_id = chat.session_().client_().id();
+                let reaction_type =
+                    tdlib::enums::ReactionType::Emoji(tdlib::types::ReactionTypeEmoji {
+                        emoji: emoji.to_string(),
+                    });
+
+                let result = if is_chosen {
+                    tdlib::functions::remove_message_reaction(
+                        chat.id(),
+                        obj.id(),
+                        reaction_type,
+                        client_id,
+                    )
+                    .await
+                } else {
+                    tdlib::functions::add_message_reaction(
+                        chat.id(),
+                        obj.id(),
+                        reaction_type,
+                        false,
+                        true,
+                        client_id,
+                    )
+                    .await
+                };
+
+                if let Err(e) = result {
+                    log::warn!("Error toggling a message reaction: {e:?}");
+                }
+            }
+        ));
     }
 
     fn set_content(&self, content: model::BoxedMessageContent) {

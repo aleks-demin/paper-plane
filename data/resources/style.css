@@ -205,6 +205,52 @@ messagebubble > box {
   padding: 6px 9px;
 }
 
+messagereactions {
+  margin-top: 3px;
+}
+
+messagereactions > button.reaction-chip {
+  padding: 2px 8px;
+  border-radius: 12px;
+  min-height: 0;
+}
+
+messagereactions > button.reaction-chip.chosen {
+  background-color: alpha(@accent_bg_color, 0.25);
+}
+
+reactionschooser > contents {
+  padding: 0;
+}
+
+reactionschooser button.emoji {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  min-height: 0;
+  min-width: 0;
+}
+
+reactionschooser button.emoji label.emoji {
+  font-size: x-large;
+  padding: 6px;
+  border-radius: 6px;
+}
+
+reactionschooser button.emoji:hover label.emoji,
+reactionschooser button.emoji:focus label.emoji {
+  background-color: alpha(@accent_bg_color, 0.4);
+}
+
+reactionschooser button.emoji.premium label.emoji {
+  opacity: 0.45;
+}
+
+button.reaction-chip.premium {
+  opacity: 0.45;
+}
+
 messagebubble.location map {
   border-radius: 14px;
 }
@@ -374,6 +420,18 @@ messagebubble.venue.with-reply map {
   border-top-right-radius: 0;
   border-top-left-radius: 0;
   margin-top: 3px;
+}
+
+messagebubble.media:not(.with-label) messagereactions {
+  margin: 9px 0 2px 2px;
+}
+
+messagebubble.media:not(.with-label) > box {
+  padding-bottom: 4px;
+}
+
+messagebubble.media:not(.with-label) messagereactions > button.reaction-chip {
+  padding: 1px 6px;
 }
 
 messagebubble.document .file.with-thumbnail > overlay > picture {

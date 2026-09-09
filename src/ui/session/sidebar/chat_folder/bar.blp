@@ -1,5 +1,4 @@
 using Gtk 4.0;
-using Adw 1;
 
 template $PaplSidebarChatFolderBar {
   layout-manager: BinLayout {};
@@ -38,7 +37,7 @@ template $PaplSidebarChatFolderBar {
       };
       model: $PaplSidebarChatFolderSelection selection {
         model: bind template.chat-folder-list;
-        selected-chat-list: bind-property template.selected-chat-list bidirectional;
+        selected-chat-list: bind template.selected-chat-list bidirectional;
       };
     }
   }
