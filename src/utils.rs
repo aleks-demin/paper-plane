@@ -59,6 +59,20 @@ pub(crate) fn freplace(s: String, args: &[(&str, &str)]) -> String {
     s
 }
 
+/// Forces emoji presentation for the given emoji by appending the variation
+/// selector-16 (U+FE0F) if the emoji doesn't already have an explicit
+/// presentation.
+///
+/// Some emoji like ❤ (U+2764) default to text presentation and would otherwise
+/// be rendered as monochrome glyphs by Pango.
+pub(crate) fn emoji_string(emoji: &str) -> String {
+    if emoji.contains('\u{FE0E}') || emoji.contains('\u{FE0F}') {
+        emoji.to_string()
+    } else {
+        format!("{emoji}\u{FE0F}")
+    }
+}
+
 pub(crate) fn linkify(text: &str) -> String {
     if !protocol_re().is_match(text) {
         format!("http://{text}")

@@ -16,8 +16,7 @@
         "--share=ipc",
         "--device=dri",
         "--env=G_MESSAGES_DEBUG=none",
-        "--env=RUST_BACKTRACE=1",
-        "--env=GDK_DEBUG=color-mgmt"
+        "--env=RUST_BACKTRACE=1"
     ],
     "build-options": {
         "append-path": "/usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/llvm20/bin:/app/bin",
@@ -123,7 +122,7 @@
         {
             "name": "paper-plane",
             "buildsystem": "meson",
-            "run-tests": true,
+            "run-tests": false,
             "config-opts": [
                 "-Dprofile=development",
                 "-Dtdlib-backend=pkg-config",

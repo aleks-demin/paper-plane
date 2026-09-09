@@ -4,6 +4,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
 use crate::model;
+use crate::utils;
 
 mod imp {
     use super::*;
@@ -88,7 +89,7 @@ impl ReactionsChooser {
             };
 
             let label = gtk::Label::builder()
-                .label(&emoji)
+                .label(utils::emoji_string(&emoji))
                 .css_classes(["emoji"])
                 .build();
 

@@ -202,6 +202,36 @@ impl MessageLabel {
         self.imp().text.borrow().clone()
     }
 
+    /// Returns the plain text of the label, without markup and without the
+    /// object replacement character used for the indicators.
+    pub(crate) fn plain_text(&self) -> String {
+        self.imp()
+            .label
+            .text()
+            .replace(OBJECT_REPLACEMENT_CHARACTER, "")
+    }
+
+    /// Returns the currently selected plain text, if any.
+    pub(crate) fn selected_text(&self) -> Option<String> {
+        let imp = self.imp();
+        let (start, end) = imp.label.selection_bounds()?;
+
+        let text: String = imp
+            .label
+            .text()
+            .chars()
+            .skip(start as usize)
+            .take((end - start) as usize)
+            .collect();
+        let text = text.replace(OBJECT_REPLACEMENT_CHARACTER, "");
+
+        if text.is_empty() {
+            None
+        } else {
+            Some(text)
+        }
+    }
+
     pub(crate) fn set_label(&self, label: String) {
         let imp = self.imp();
         let old = imp.text.replace(label);

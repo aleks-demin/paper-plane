@@ -113,6 +113,9 @@ mod imp {
             klass.install_action("message-row.react-menu", None, move |widget, _, _| {
                 widget.show_reactions_chooser()
             });
+            klass.install_action("message-row.copy-text", None, move |widget, _, _| {
+                widget.copy_text()
+            });
         }
 
         fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
@@ -452,6 +455,28 @@ impl Row {
         }
     }
 
+    fn copy_text(&self) {
+        let label = self
+            .imp()
+            .content
+            .borrow()
+            .as_ref()
+            .and_then(|content| find_message_label(content));
+
+        let Some(label) = label else {
+            return;
+        };
+
+        let text = label.selected_text().unwrap_or_else(|| label.plain_text());
+
+        if text.is_empty() {
+            return;
+        }
+
+        self.clipboard().set_text(&text);
+        utils::show_toast(self, gettext("Copied to clipboard"));
+    }
+
     fn update_actions(&self) {
         self.action_set_enabled("message-row.reply", self.can_reply_to_message());
         self.action_set_enabled("message-row.edit", self.can_edit_message());
@@ -586,6 +611,22 @@ impl Row {
             }
         }
     }
+}
+
+fn find_message_label(widget: &gtk::Widget) -> Option<ui::MessageLabel> {
+    if let Some(label) = widget.downcast_ref::<ui::MessageLabel>() {
+        return Some(label.clone());
+    }
+
+    let mut child = widget.first_child();
+    while let Some(child_) = child {
+        if let Some(label) = find_message_label(&child_) {
+            return Some(label);
+        }
+        child = child_.next_sibling();
+    }
+
+    None
 }
 
 fn can_send_messages_in_chat(chat: &model::Chat) -> bool {

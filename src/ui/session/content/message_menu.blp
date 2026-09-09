@@ -21,6 +21,11 @@ menu model {
     }
 
     item {
+      label: _("_Copy Text");
+      action: "message-row.copy-text";
+    }
+
+    item {
       label: _("Delete for Ever_yone");
       action: "message-row.revoke-delete";
       hidden-when: "action-disabled";

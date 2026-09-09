@@ -255,7 +255,7 @@ impl MessageReactions {
             };
 
             let label = gtk::Label::builder()
-                .label(format!("{emoji} {}", reaction.total_count))
+                .label(format!("{} {}", utils::emoji_string(&emoji), reaction.total_count))
                 .build();
 
             let button = gtk::Button::builder()

@@ -12,7 +12,12 @@ mod imp {
 
     #[derive(Debug, Default, CompositeTemplate)]
     #[template(resource = "/app/drey/paper-plane/ui/session/content/message_row/base.ui")]
-    pub(crate) struct MessageBase {}
+    pub(crate) struct MessageBase {
+        #[template_child]
+        pub(super) right_click: TemplateChild<gtk::GestureClick>,
+        #[template_child]
+        pub(super) right_long_press: TemplateChild<gtk::GestureLongPress>,
+    }
 
     #[glib::object_subclass]
     impl ObjectSubclass for MessageBase {
@@ -34,12 +39,21 @@ mod imp {
     #[gtk::template_callbacks]
     impl MessageBase {
         #[template_callback]
+        fn on_right_click_pressed(&self) {
+            // Claim the event sequence so that selectable labels don't
+            // receive it and show their own context menu.
+            self.right_click.set_state(gtk::EventSequenceState::Claimed);
+        }
+
+        #[template_callback]
         fn on_pressed(&self, _n_press: i32, x: f64, y: f64) {
             self.show_message_menu(x as i32, y as i32);
         }
 
         #[template_callback]
         fn on_long_pressed(&self, x: f64, y: f64) {
+            self.right_long_press
+                .set_state(gtk::EventSequenceState::Claimed);
             self.show_message_menu(x as i32, y as i32);
         }
 

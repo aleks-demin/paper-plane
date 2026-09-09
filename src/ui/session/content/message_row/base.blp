@@ -1,13 +1,16 @@
 using Gtk 4.0;
 
 template $PaplMessageBase {
-  GestureClick {
+  GestureClick right_click {
     button: 3;
+    propagation-phase: capture;
+    pressed => $on_right_click_pressed() swapped;
     released => $on_pressed() swapped;
   }
 
-  GestureLongPress {
+  GestureLongPress right_long_press {
     touch-only: true;
+    propagation-phase: capture;
     pressed => $on_long_pressed() swapped;
   }
 }
