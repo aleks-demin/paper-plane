@@ -66,7 +66,6 @@ jobs:
           bundle: paper-plane.flatpak
           manifest-path: build-aux/app.drey.PaperPlane.Devel.json
           arch: ${{ matrix.arch }}
-          cache-key: flatpak-builder-${{ github.sha }}
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
