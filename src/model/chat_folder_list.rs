@@ -244,12 +244,9 @@ impl ChatFolderList {
 
             // Emit in descending order so that the positions stay valid
             // after each emission.
-            removed_positions
-                .into_iter()
-                .rev()
-                .for_each(|position| {
-                    self.delegate_items_changed(position as u32, 1, 0);
-                });
+            removed_positions.into_iter().rev().for_each(|position| {
+                self.delegate_items_changed(position as u32, 1, 0);
+            });
 
             update
                 .chat_folders

@@ -1,4 +1,5 @@
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
+use std::cell::RefCell;
 use std::sync::OnceLock;
 
 use gtk::glib;

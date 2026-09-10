@@ -1,4 +1,6 @@
-use std::cell::{Cell, OnceCell, RefCell};
+use std::cell::Cell;
+use std::cell::OnceCell;
+use std::cell::RefCell;
 use std::iter;
 
 use adw::prelude::*;
@@ -9,13 +11,13 @@ use gtk::glib;
 use gtk::graphene;
 use gtk::CompositeTemplate;
 
-use crate::model;
-use crate::types::MessageId;
-use crate::ui::{ScaleRevealer, Session};
-use crate::utils;
-
 use super::super::playback_manager;
 use super::media_viewer_page::MediaViewerPage;
+use crate::model;
+use crate::types::MessageId;
+use crate::ui::ScaleRevealer;
+use crate::ui::Session;
+use crate::utils;
 
 /// The number of media messages requested per search when older media is
 /// loaded.

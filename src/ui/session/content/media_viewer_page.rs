@@ -1,4 +1,5 @@
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
+use std::cell::RefCell;
 
 use glib::clone;
 use gtk::gdk;
@@ -7,15 +8,14 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
-use crate::model;
-use crate::model::MediaType;
-use crate::utils;
-
 use super::super::playback_manager;
 use super::media_viewer::ViewerItem;
 use super::message_row::FileStatus;
 use super::message_row::MediaDownloadButton;
 use super::message_row::MediaLoader;
+use crate::model;
+use crate::model::MediaType;
+use crate::utils;
 
 mod imp {
     use super::*;

@@ -144,7 +144,9 @@ impl ClientStateSession {
 
     /// Returns the [`MediaManager`] used by this session.
     pub(crate) fn media_manager(&self) -> &model::MediaManager {
-        self.imp().media_manager.get_or_init(|| model::MediaManager::new(self))
+        self.imp()
+            .media_manager
+            .get_or_init(|| model::MediaManager::new(self))
     }
 
     /// Returns the `model::Chat` of the specified id, if present.

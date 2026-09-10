@@ -7,10 +7,9 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
+use super::FileStatus;
 use crate::model;
 use crate::model::MediaType;
-
-use super::FileStatus;
 
 mod imp {
     use super::*;

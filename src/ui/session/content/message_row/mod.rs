@@ -221,10 +221,7 @@ impl Row {
                 let emoji_reactions: Vec<_> = reactions
                     .into_iter()
                     .filter(|reaction| {
-                        matches!(
-                            reaction.r#type,
-                            tdlib::enums::ReactionType::Emoji(_)
-                        )
+                        matches!(reaction.r#type, tdlib::enums::ReactionType::Emoji(_))
                     })
                     .collect();
 
@@ -392,27 +389,24 @@ impl Row {
             ] {
                 let obj_weak = obj_weak.clone();
 
-                let handler_id = message.connect_notify_local(
-                    Some(pspec_name),
-                    move |_, _| {
-                        if let Some(obj) = obj_weak.upgrade() {
-                            obj.update_actions();
-                        }
-                    },
-                );
+                let handler_id = message.connect_notify_local(Some(pspec_name), move |_, _| {
+                    if let Some(obj) = obj_weak.upgrade() {
+                        obj.update_actions();
+                    }
+                });
                 imp.properties_handler_ids.borrow_mut().push(handler_id);
             }
 
             // Reactions availability is a chat-level setting. Update the
             // actions whenever the chat's `available-reactions` changes.
-            let handler_id = message.chat_().connect_notify_local(
-                Some("available-reactions"),
-                move |_, _| {
-                    if let Some(obj) = obj_weak.upgrade() {
-                        obj.update_actions();
-                    }
-                },
-            );
+            let handler_id =
+                message
+                    .chat_()
+                    .connect_notify_local(Some("available-reactions"), move |_, _| {
+                        if let Some(obj) = obj_weak.upgrade() {
+                            obj.update_actions();
+                        }
+                    });
             imp.chat_properties_handler_id.replace(Some(handler_id));
         }
 

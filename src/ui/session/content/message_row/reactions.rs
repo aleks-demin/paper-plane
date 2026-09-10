@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::sync::OnceLock;
 
+use gtk::gdk;
 use gtk::glib;
 use gtk::glib::clone;
 use gtk::prelude::*;
@@ -9,8 +10,6 @@ use gtk::CompositeTemplate;
 
 use crate::model;
 use crate::utils;
-
-use gtk::gdk;
 
 const SPACING: i32 = 6;
 
@@ -152,10 +151,7 @@ mod imp {
                     row_height = 0;
                 }
 
-                child.size_allocate(
-                    &gdk::Rectangle::new(x, y, chip_width, natural_height),
-                    -1,
-                );
+                child.size_allocate(&gdk::Rectangle::new(x, y, chip_width, natural_height), -1);
 
                 x += chip_width + SPACING;
                 row_height = row_height.max(natural_height);
@@ -255,7 +251,11 @@ impl MessageReactions {
             };
 
             let label = gtk::Label::builder()
-                .label(format!("{} {}", utils::emoji_string(&emoji), reaction.total_count))
+                .label(format!(
+                    "{} {}",
+                    utils::emoji_string(&emoji),
+                    reaction.total_count
+                ))
                 .build();
 
             let button = gtk::Button::builder()

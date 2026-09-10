@@ -169,24 +169,24 @@ impl ChatHistoryModel {
 
         chat.set_history(&obj);
 
-        imp.handlers.borrow_mut().push(chat.connect_new_message(
-            clone!(
+        imp.handlers
+            .borrow_mut()
+            .push(chat.connect_new_message(clone!(
                 #[weak]
                 obj,
                 move |_, message| {
                     obj.handle_new_message(message);
                 }
-            ),
-        ));
-        imp.handlers.borrow_mut().push(
-            chat.connect_deleted_message(clone!(
+            )));
+        imp.handlers
+            .borrow_mut()
+            .push(chat.connect_deleted_message(clone!(
                 #[weak]
                 obj,
                 move |_, message| {
                     obj.handle_deleted_message(message);
                 }
-            )),
-        );
+            )));
 
         obj
     }
@@ -210,9 +210,7 @@ impl ChatHistoryModel {
             .map(|m| m.id())
             .unwrap_or(imp.anchor.get());
 
-        log::debug!(
-            "load_older_messages: from_message_id = {from_message_id}, limit = {limit}"
-        );
+        log::debug!("load_older_messages: from_message_id = {from_message_id}, limit = {limit}");
 
         imp.is_loading_older.set(true);
 
@@ -262,11 +260,7 @@ impl ChatHistoryModel {
 
         let result = self
             .chat()
-            .get_chat_history(
-                anchor,
-                -AROUND_NEWER_MESSAGES,
-                AROUND_NEWER_MESSAGES * 2,
-            )
+            .get_chat_history(anchor, -AROUND_NEWER_MESSAGES, AROUND_NEWER_MESSAGES * 2)
             .await;
 
         imp.is_loading_older.set(false);
@@ -275,8 +269,8 @@ impl ChatHistoryModel {
 
         // The chat's last message is the newest one, so if we loaded it, all
         // the messages newer than the anchor are loaded.
-        let reached_newest = self.chat().last_message().map(|m| m.id())
-            == messages.first().map(|m| m.id());
+        let reached_newest =
+            self.chat().last_message().map(|m| m.id()) == messages.first().map(|m| m.id());
 
         if !messages.is_empty() {
             let count = messages.len();
@@ -782,11 +776,11 @@ impl ChatHistoryModel {
         }
 
         log::debug!(
-                "New message {} pushed to the front of the history",
-                message.id(),
-            );
-            self.push_front(message);
-        }
+            "New message {} pushed to the front of the history",
+            message.id(),
+        );
+        self.push_front(message);
+    }
 
     fn handle_deleted_message(&self, message: model::Message) {
         self.imp()
@@ -861,7 +855,8 @@ impl ChatHistoryModel {
     fn flush_pending_new_messages(&self) {
         let imp = self.imp();
 
-        let pending: Vec<model::Message> = imp.pending_new_messages.borrow_mut().drain(..).collect();
+        let pending: Vec<model::Message> =
+            imp.pending_new_messages.borrow_mut().drain(..).collect();
         log::debug!("Flushing {} pending new messages", pending.len());
 
         // The messages are ordered from the oldest to the newest. Prepend them

@@ -2,9 +2,8 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
-use crate::utils;
-
 use super::media_album_layout::MediaAlbumLayout;
+use crate::utils;
 
 mod imp {
     use super::*;

@@ -8,14 +8,13 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
+use super::FileStatus;
 use crate::model;
 use crate::model::MediaType;
 use crate::ui::MediaViewer;
 use crate::ui::ViewerEntry;
 use crate::ui::ViewerItem;
 use crate::utils;
-
-use super::FileStatus;
 
 mod imp {
     use super::*;

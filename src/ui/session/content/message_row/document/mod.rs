@@ -4,7 +4,6 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::sync::OnceLock;
 
-pub(crate) use super::file_status::FileStatus;
 use glib::clone;
 use gtk::gdk;
 use gtk::gio;
@@ -14,6 +13,7 @@ use gtk::subclass::prelude::*;
 use gtk::CompositeTemplate;
 
 pub(crate) use self::status_indicator::StatusIndicator;
+pub(crate) use super::file_status::FileStatus;
 use crate::model;
 use crate::model::MediaType;
 use crate::ui;

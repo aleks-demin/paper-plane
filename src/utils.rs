@@ -273,8 +273,10 @@ pub(crate) fn decode_image_from_path(path: &str) -> Result<gdk::MemoryTexture, D
 pub(crate) fn texture_from_minithumbnail(
     minithumbnail: &tdlib::types::Minithumbnail,
 ) -> Option<gdk::Texture> {
-    gdk::Texture::from_bytes(&glib::Bytes::from_owned(glib::base64_decode(&minithumbnail.data)))
-        .ok()
+    gdk::Texture::from_bytes(&glib::Bytes::from_owned(glib::base64_decode(
+        &minithumbnail.data,
+    )))
+    .ok()
 }
 
 /// Returns the photo size that should be loaded for the given scale factor.

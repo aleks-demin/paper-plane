@@ -5,7 +5,8 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
-use super::album_layout::{self, PhysicalSize};
+use super::album_layout::PhysicalSize;
+use super::album_layout::{self};
 
 /// The natural width the album asks for.
 ///

@@ -79,14 +79,14 @@ pub(crate) use self::client_state_session::ClientStateSession;
 pub(crate) use self::country_info::CountryInfo;
 pub(crate) use self::country_list::CountryList;
 pub(crate) use self::media_album::MediaAlbum;
+pub(crate) use self::media_manager::MediaManager;
+pub(crate) use self::media_manager::MediaType;
 pub(crate) use self::message::Message;
 pub(crate) use self::message::MessageSender;
 pub(crate) use self::message_forward_info::MessageForwardInfo;
 pub(crate) use self::message_forward_info::MessageForwardOrigin;
 pub(crate) use self::message_interaction_info::BoxedMessageReactions;
 pub(crate) use self::message_interaction_info::MessageInteractionInfo;
-pub(crate) use self::media_manager::MediaManager;
-pub(crate) use self::media_manager::MediaType;
 pub(crate) use self::secret_chat::SecretChat;
 pub(crate) use self::secret_chat::SecretChatState;
 pub(crate) use self::sponsored_message::SponsoredMessage;
@@ -145,9 +145,11 @@ pub(crate) struct BoxedDatabaseInfo(pub(crate) DatabaseInfo);
 pub(crate) struct BoxedChatMemberStatus(pub(crate) ChatMemberStatus);
 impl Default for BoxedChatMemberStatus {
     fn default() -> Self {
-        Self(ChatMemberStatus::Member(tdlib::types::ChatMemberStatusMember {
-            member_until_date: 0,
-        }))
+        Self(ChatMemberStatus::Member(
+            tdlib::types::ChatMemberStatusMember {
+                member_until_date: 0,
+            },
+        ))
     }
 }
 
@@ -171,9 +173,7 @@ impl Default for BoxedChatAvailableReactions {
     fn default() -> Self {
         // Only used for `Default` bounds of property storage; real chats
         // always get their actual value in `Chat::new`.
-        Self(tdlib::enums::ChatAvailableReactions::All(
-            Default::default(),
-        ))
+        Self(tdlib::enums::ChatAvailableReactions::All(Default::default()))
     }
 }
 

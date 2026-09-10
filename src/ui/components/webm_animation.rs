@@ -1,16 +1,20 @@
-use std::{
-    cell::{Cell, RefCell},
-    os::raw::{c_int, c_uint},
-    path::PathBuf,
-    ptr,
-    sync::mpsc,
-    time::{Duration, Instant},
-};
+use std::cell::Cell;
+use std::cell::RefCell;
+use std::os::raw::c_int;
+use std::os::raw::c_uint;
+use std::path::PathBuf;
+use std::ptr;
+use std::sync::mpsc;
+use std::time::Duration;
+use std::time::Instant;
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
-use gtk::{gdk, glib};
-use matroska_demuxer::{Frame, MatroskaFile, TrackType};
+use gtk::gdk;
+use gtk::glib;
+use matroska_demuxer::Frame;
+use matroska_demuxer::MatroskaFile;
+use matroska_demuxer::TrackType;
 
 /// A single decoded video frame, ready to be turned into a
 /// [`gdk::MemoryTexture`].
@@ -373,8 +377,9 @@ fn run_worker(
 }
 
 mod imp {
-    use super::*;
     use std::sync::OnceLock;
+
+    use super::*;
 
     #[derive(Debug, Default, glib::Properties)]
     #[properties(wrapper_type = super::WebmAnimation)]

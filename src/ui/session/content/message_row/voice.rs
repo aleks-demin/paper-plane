@@ -9,15 +9,14 @@ use gtk::subclass::prelude::*;
 use gtk::CompositeTemplate;
 use ui::MessageBaseExt;
 
+use super::FileStatus;
+use super::MediaDownloadButton;
+use super::MediaLoader;
 use crate::model;
 use crate::model::MediaType;
 use crate::ui;
 use crate::ui::session::playback_manager;
 use crate::utils;
-
-use super::FileStatus;
-use super::MediaDownloadButton;
-use super::MediaLoader;
 
 mod imp {
     use super::*;

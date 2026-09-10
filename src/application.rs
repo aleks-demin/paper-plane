@@ -1,4 +1,5 @@
-use std::cell::{OnceCell, RefCell};
+use std::cell::OnceCell;
+use std::cell::RefCell;
 
 use adw::prelude::AdwDialogExt;
 use adw::subclass::prelude::*;

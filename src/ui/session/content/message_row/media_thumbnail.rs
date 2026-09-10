@@ -1,4 +1,5 @@
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
+use std::cell::RefCell;
 
 use glib::clone;
 use gtk::gdk;
@@ -8,11 +9,10 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::CompositeTemplate;
 
+use super::MediaPicture;
 use crate::model;
 use crate::model::MediaType;
 use crate::utils;
-
-use super::MediaPicture;
 
 /// A shared preview widget for media that has a low-resolution minithumbnail
 /// and an optional high-resolution thumbnail.

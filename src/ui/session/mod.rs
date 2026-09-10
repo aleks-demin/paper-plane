@@ -44,16 +44,17 @@ pub(crate) use self::content::MessageMediaAlbum;
 pub(crate) use self::content::MessagePhoto;
 pub(crate) use self::content::MessageReactions;
 pub(crate) use self::content::MessageReply;
-pub(crate) use self::content::ReactionsChooser;
 pub(crate) use self::content::MessageRow;
 pub(crate) use self::content::MessageSticker;
 pub(crate) use self::content::MessageText;
 pub(crate) use self::content::MessageVenue;
 pub(crate) use self::content::MessageVideo;
 pub(crate) use self::content::MessageVoiceNote;
+pub(crate) use self::content::ReactionsChooser;
 pub(crate) use self::content::SendMediaWindow;
 pub(crate) use self::content::ViewerEntry;
 pub(crate) use self::content::ViewerItem;
+use self::playback_manager::PlaybackManager;
 pub(crate) use self::preferences_dialog::PreferencesDialog;
 pub(crate) use self::row::Row;
 pub(crate) use self::sidebar::Avatar as SidebarAvatar;
@@ -77,8 +78,6 @@ use crate::model;
 use crate::types::ChatId;
 use crate::ui;
 use crate::utils;
-
-use self::playback_manager::PlaybackManager;
 
 mod imp {
 

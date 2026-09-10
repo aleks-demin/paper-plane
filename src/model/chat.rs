@@ -204,8 +204,11 @@ impl Chat {
         imp.last_read_outbox_message_id
             .set(td_chat.last_read_outbox_message_id);
         imp.is_marked_as_unread.set(td_chat.is_marked_as_unread);
-        imp.last_message
-            .replace(td_chat.last_message.map(|message| obj.insert_message(message)));
+        imp.last_message.replace(
+            td_chat
+                .last_message
+                .map(|message| obj.insert_message(message)),
+        );
         imp.unread_mention_count.set(td_chat.unread_mention_count);
         imp.unread_count.set(td_chat.unread_count);
         imp.draft_message
@@ -217,7 +220,9 @@ impl Chat {
         imp.permissions
             .replace(model::BoxedChatPermissions(td_chat.permissions));
         imp.available_reactions
-            .replace(model::BoxedChatAvailableReactions(td_chat.available_reactions));
+            .replace(model::BoxedChatAvailableReactions(
+                td_chat.available_reactions,
+            ));
 
         obj
     }

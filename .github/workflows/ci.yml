@@ -13,14 +13,14 @@ jobs:
     name: Check Commit Style
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: webiny/action-conventional-commits@v1.1.0
+      - uses: actions/checkout@v7
+      - uses: webiny/action-conventional-commits@v1.4.2
 
   typos:
     name: Typos
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: crate-ci/typos@master
         with:
           config: ./.github/workflows/typos.toml
@@ -29,7 +29,7 @@ jobs:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
@@ -50,7 +50,7 @@ jobs:
       # Don't fail the whole workflow if one architecture fails
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Docker is required by the docker/setup-qemu-action which enables emulation
       - name: Install dependencies
         if: ${{ matrix.arch != 'x86_64' }}
@@ -75,7 +75,7 @@ jobs:
     needs: [flatpak]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Create vendored sources
         run: build-aux/dist-vendor.sh ../ src
         shell: bash

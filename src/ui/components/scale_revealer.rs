@@ -7,7 +7,9 @@ use gtk::glib::closure_local;
 const ANIMATION_DURATION: u32 = 250;
 
 mod imp {
-    use std::cell::{Cell, OnceCell, RefCell};
+    use std::cell::Cell;
+    use std::cell::OnceCell;
+    use std::cell::RefCell;
     use std::sync::LazyLock;
 
     use adw::subclass::prelude::*;
